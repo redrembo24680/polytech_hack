@@ -91,3 +91,4 @@
 - Оркестратор: додано `ORCHESTRATOR_PROVIDER=ollama|gemini` (Gemini API `gemma-4-31b-it` через `langchain-google-genai`), типова модель Ollama тепер `gemma4:12b`; 172 тести.
 - Ролі змінено: оркестратор — Claude Sonnet (LangChain), Gemma 4 — відповіді на прості питання; дії — основний loop.
 - Емоції та розмовна українська: `agent/lingo.py` (глосарій, емоції, регістр), нові поля `Triage` (emotion/intensity/register/normalized), розділи "Мова клієнта" та "Емоції" у промпті воркера, `emotions` у метриках і емодзі в copilot.
+- Телефонний канал через Vapi: `agent/voice.py` (вебхук tools, сесія voice:{tenant}:{phone}, show_card -> SMS), `scripts/vapi_setup.py`, README "Телефонія через Vapi"; 186 тестів.

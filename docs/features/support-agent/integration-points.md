@@ -37,3 +37,8 @@
 
 ## Claude Sonnet (оркестратор) і Gemma 4 (відповідач)
 Оркестратор за замовчуванням: `langchain-anthropic` `ChatAnthropic` (`ORCHESTRATOR_MODEL=claude-sonnet-5-5`, `ANTHROPIC_API_KEY`, `temperature=0`, `max_tokens=512`); альтернативи `ORCHESTRATOR_PROVIDER=ollama|gemini` (описано вище). Відповідач `Answerer`: `ANSWERER=on|off`, `ANSWERER_PROVIDER=ollama` (за замовчуванням, `ANSWERER_MODEL=gemma4:12b`, `ANSWERER_BASE_URL=http://localhost:11434`) або `gemini` (`gemma-4-31b-it`, `GEMINI_API_KEY`; без ключа відповідача немає). Створення клієнтів не робить мережевих викликів.
+
+## Vapi (телефонія)
+
+- Vapi -> наш сервер: `POST /voice/tools` (server URL асистента). Тіло: `message.type="tool-calls"`, `message.toolCallList[]` (`id`, `function.name`, `function.arguments`), `message.call.customer.number`. Відповідь: `{"results":[{"toolCallId","result":"<рядок>"}]}`, HTTP 200.
+- Наш сервер -> Vapi: `scripts/vapi_setup.py` (`POST/PATCH /assistant`, `POST /phone-number`). Докс: https://docs.vapi.ai/tools/custom-tools

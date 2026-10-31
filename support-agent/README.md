@@ -76,3 +76,14 @@ Claude Sonnet (через LangChain `ChatAnthropic`, `agent/orchestrator.py`) н
 
 ## Емоції та говірка
 Оркестратор розпізнає емоцію клієнта (calm, anxious, sad, frustrated, angry, happy) та інтенсивність, а також розуміє суржик, галицьку говірку і чат-сленг (глосарій у `agent/lingo.py`). Агент відповідає в регістрі клієнта, але лайку не копіює; сильний гнів у скарзі передається людині. Емоції видно в copilot і в метриках.
+## Телефонія через Vapi
+
+Vapi тримає номер, STT/TTS і власний LLM-цикл, а наші інструменти (з тією ж політикою й апрувами) викликає вебхуком `POST /voice/tools`. Апруви з дзвінків потрапляють у той самий copilot.
+
+1. У `.env`: `VAPI_API_KEY=...` (https://dashboard.vapi.ai), `VOICE_TENANT_ID=lumen`.
+2. `AGENT_PROVIDER=fake ORCHESTRATOR=off uv run uvicorn agent.main:app --port 8000` (LLM для голосу не потрібен).
+3. `ngrok http 8000`, адресу `https://....ngrok-free.app` запишіть у `.env` як `PUBLIC_URL`.
+4. `uv run python scripts/vapi_setup.py --number` — створить асистента, надрукує `VAPI_ASSISTANT_ID` (додайте в `.env`) і номер.
+5. Зателефонуйте на номер з телефону клієнта із seed (напр. +380501110001).
+
+Ручна перевірка без Vapi: `curl -X POST localhost:8000/voice/tools/get_client_profile -H 'content-type: application/json' -d '{"phone":"+380501110001","args":{}}'`.
