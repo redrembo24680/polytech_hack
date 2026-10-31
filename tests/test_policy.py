@@ -1,6 +1,6 @@
 import pytest
 
-from agent.policy import Allow, Forbidden, NeedsApproval, decide, is_late_change
+from agent.policy import Allow, Forbidden, NeedsApproval, PolicyContext, decide, is_late_change
 from tests.conftest import NOW, booking, ctx, policy
 
 
@@ -54,3 +54,28 @@ def test_is_late_change_false_outside_window():
 )
 def test_every_decision_has_reason(action):
     assert decide(action, ctx("lumen", "olena", "b-olena-1", amount=100)).reason
+
+
+def test_refund_without_amount_needs_approval():
+    for amount in (None, 0, -5):
+        d = decide("refund", ctx("lumen", "olena", "b-olena-1", amount=amount))
+        assert isinstance(d, NeedsApproval) and "суму" in d.reason.lower()
+
+
+@pytest.mark.parametrize(
+    "action,field,value",
+    [
+        ("cancel", "cancel", "weird"),
+        ("refund", "refund", "auto"),
+        ("goodwill_exception", "goodwill_exception", "auto_under_limit"),
+    ],
+)
+def test_unknown_mode_raises(action, field, value):
+    c = ctx("lumen", "olena", "b-olena-1", amount=100)
+    perms = c.policy.agent_permissions.model_copy(update={field: value})
+    c = PolicyContext(
+        policy=c.policy.model_copy(update={"agent_permissions": perms}),
+        client=c.client, booking=c.booking, now=c.now, amount=c.amount,
+    )
+    with pytest.raises(ValueError, match="unknown permission mode"):
+        decide(action, c)

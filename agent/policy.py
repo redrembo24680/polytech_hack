@@ -58,11 +58,18 @@ def decide(action: Action, ctx: PolicyContext) -> Decision:
         return NeedsApproval("Політика закладу вимагає підтвердження людини для цієї дії.")
 
     if action == "refund":
-        amount = ctx.amount or 0
+        if mode != "auto_under_limit":
+            raise ValueError(f"unknown permission mode {mode!r} for {action}")
+        amount = ctx.amount
+        if amount is None or amount <= 0:
+            return NeedsApproval("Суму повернення не вказано або вона недійсна, тому потрібне підтвердження людини.")
         limit = perms.refund_auto_limit
         if amount <= limit:
             return Allow(f"Сума повернення {amount} грн не перевищує автоматичний ліміт {limit} грн.")
         return NeedsApproval(f"Сума повернення {amount} грн перевищує автоматичний ліміт {limit} грн.")
+
+    if mode != "auto":
+        raise ValueError(f"unknown permission mode {mode!r} for {action}")
 
     if action == "goodwill_exception":
         no_shows = ctx.client.no_show_count
