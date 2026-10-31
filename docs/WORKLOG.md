@@ -81,3 +81,4 @@
 - **Відкрито:** живий прогін Gemma 4 (потрібен `GEMINI_API_KEY` у `support-agent/.env`), dev-залежність
   `httpx2`, stretch: HttpDataSource/McpDataSource до платформи тіммейта, голосовий webhook.
 - Додано провайдер `openai_compat`/`ollama` (локальна Gemma 4 через Ollama).
+- Додано провайдер `anthropic` (Claude Sonnet 5.5) в адаптер; обираємо модель через AGENT_PROVIDER/AGENT_MODEL.

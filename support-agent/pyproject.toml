@@ -9,6 +9,7 @@ dependencies = [
     "google-genai",
     "httpx",
     "python-dotenv",
+    "anthropic>=2.3.0",
 ]
 
 [dependency-groups]

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent.llm import (
+    AnthropicClient,
     CallPart,
     FakeClient,
     GeminiClient,
@@ -334,3 +335,131 @@ def test_make_client_ollama_defaults(monkeypatch):
         c = make_client()
         assert isinstance(c, OpenAICompatClient)
         assert c.model == "gemma4" and c.base_url == "http://localhost:11434/v1" and c.api_key == "ollama"
+
+
+# ---- Anthropic ----
+
+def _blk(**kw):
+    ns = SimpleNamespace(**kw)
+    ns.model_dump = lambda: dict(kw)
+    return ns
+
+
+class FakeAnthropic:
+    def __init__(self, content, stop_reason="end_turn"):
+        self.kwargs = None
+        self._resp = SimpleNamespace(content=content, stop_reason=stop_reason)
+        self.messages = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs):
+        self.kwargs = kwargs
+        return self._resp
+
+
+def _anthropic(content=(), stop_reason="end_turn"):
+    sdk = FakeAnthropic(list(content), stop_reason)
+    return AnthropicClient("claude-sonnet-5-5", "k", client=sdk), sdk
+
+
+def test_anthropic_request_shape(monkeypatch):
+    monkeypatch.delenv("AGENT_SYSTEM_AS_PREFIX", raising=False)
+    raw = [
+        {"type": "thinking", "thinking": "hm", "signature": "sig"},
+        {"type": "tool_use", "id": "toolu_A", "name": "get_booking", "input": {"booking_id": "b1"}},
+        {"type": "tool_use", "id": "toolu_B", "name": "ping", "input": {}},
+    ]
+    history = [
+        Msg("user", [TextPart("Привіт")]),
+        Msg("model", [CallPart("get_booking", {"booking_id": "b1"}, b"toolu_A"),
+                      CallPart("ping", {}, b"toolu_B")], raw=raw),
+        Msg("tool", [ResultPart("get_booking", {"ok": 1}), ResultPart("ping", {"pong": True})]),
+    ]
+    tools = TOOLS + [{"name": "ping", "description": "Ping"}]
+    client, sdk = _anthropic([_blk(type="text", text="ok")])
+    client.generate("SYS", history, tools)
+    kw = sdk.kwargs
+    assert kw["model"] == "claude-sonnet-5-5"
+    assert kw["system"] == "SYS"
+    assert kw["output_config"] == {"effort": "medium"}
+    assert "thinking" not in kw and "tool_choice" not in kw
+    assert kw["tools"][0]["input_schema"] == TOOLS[0]["parameters"]
+    assert kw["tools"][1]["input_schema"] == {"type": "object", "properties": {}}
+    msgs = kw["messages"]
+    assert msgs[0] == {"role": "user", "content": "Привіт"}
+    assert msgs[1] == {"role": "assistant", "content": raw}
+    assert msgs[2]["role"] == "user" and len(msgs) == 3
+    assert [b["tool_use_id"] for b in msgs[2]["content"]] == ["toolu_A", "toolu_B"]
+    assert all(b["type"] == "tool_result" for b in msgs[2]["content"])
+
+
+def test_anthropic_lowercases_nested_types():
+    tools = [{"name": "t", "description": "d", "parameters": {
+        "type": "OBJECT", "properties": {"a": {"type": "ARRAY", "items": {"type": "STRING"}}}}}]
+    client, sdk = _anthropic()
+    client.generate("S", [Msg("user", [TextPart("x")])], tools)
+    schema = sdk.kwargs["tools"][0]["input_schema"]
+    assert schema["type"] == "object"
+    assert schema["properties"]["a"] == {"type": "array", "items": {"type": "string"}}
+
+
+def test_anthropic_rebuilds_assistant_without_raw():
+    history = [
+        Msg("user", [TextPart("q")]),
+        Msg("model", [TextPart("думаю"), CallPart("ping", {})]),
+        Msg("tool", [ResultPart("ping", {"p": 1})]),
+    ]
+    client, sdk = _anthropic()
+    client.generate("S", history, [])
+    msgs = sdk.kwargs["messages"]
+    assert msgs[1]["content"] == [
+        {"type": "text", "text": "думаю"},
+        {"type": "tool_use", "id": "toolu_0", "name": "ping", "input": {}},
+    ]
+    assert msgs[2]["content"][0]["tool_use_id"] == "toolu_0"
+    assert "tools" not in sdk.kwargs
+
+
+def test_anthropic_system_as_prefix(monkeypatch):
+    monkeypatch.setenv("AGENT_SYSTEM_AS_PREFIX", "1")
+    client, sdk = _anthropic()
+    client.generate("SYS", [Msg("user", [TextPart("Привіт")])], [])
+    assert "system" not in sdk.kwargs
+    assert "SYS" in sdk.kwargs["messages"][0]["content"]
+    assert "Привіт" in sdk.kwargs["messages"][0]["content"]
+
+
+def test_anthropic_parses_response():
+    content = [
+        _blk(type="thinking", thinking="…", signature="s"),
+        _blk(type="text", text="Дивлюся"),
+        _blk(type="tool_use", id="toolu_1", name="a", input={"x": 1}),
+        _blk(type="tool_use", id="toolu_2", name="b", input={}),
+    ]
+    client, _ = _anthropic(content, "tool_use")
+    out = client.generate("S", [Msg("user", [TextPart("q")])], [])
+    assert out.parts == [
+        TextPart("Дивлюся"),
+        CallPart("a", {"x": 1}, b"toolu_1"),
+        CallPart("b", {}, b"toolu_2"),
+    ]
+    assert len(out.raw) == 4 and all(isinstance(b, dict) for b in out.raw)
+
+
+def test_anthropic_empty_and_refusal():
+    client, _ = _anthropic([])
+    assert client.generate("S", [Msg("user", [TextPart("q")])], []).parts == [TextPart("")]
+    client, _ = _anthropic([], "refusal")
+    out = client.generate("S", [Msg("user", [TextPart("q")])], [])
+    assert out.parts == [TextPart("Вибачте, я не можу допомогти з цим запитом.")]
+
+
+def test_make_client_anthropic(monkeypatch):
+    monkeypatch.setattr("agent.llm.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setenv("AGENT_PROVIDER", "anthropic")
+    monkeypatch.delenv("AGENT_MODEL", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    c = make_client()
+    assert isinstance(c, AnthropicClient) and c.model == "claude-sonnet-5-5"
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        make_client()

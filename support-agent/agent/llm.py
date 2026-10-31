@@ -37,6 +37,7 @@ Part = TextPart | CallPart | ResultPart
 class Msg:
     role: Literal["user", "model", "tool"]
     parts: list
+    raw: object = None  # provider-native content (Anthropic: blocks incl. thinking), replayed verbatim
 
 
 class LLMClient(Protocol):
@@ -267,6 +268,90 @@ class OpenAICompatClient:
                 self._sleep(delay)
 
 
+class AnthropicClient:
+    """Anthropic Messages API (Claude). Thinking blocks are replayed via Msg.raw."""
+
+    REFUSAL = "Вибачте, я не можу допомогти з цим запитом."
+
+    def __init__(self, model: str, api_key: str, client=None, max_tokens: int = 4096):
+        self.model = model
+        self.max_tokens = max_tokens
+        if client is None:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=api_key)
+        self._client = client
+
+    @staticmethod
+    def _messages(system: str, history: list[Msg], prefix: bool) -> list[dict]:
+        prefix_pending = prefix
+        out: list[dict] = []
+        last_ids: list[str] = []
+        for msg in history:
+            if msg.role == "user":
+                text = "".join(p.text for p in msg.parts if isinstance(p, TextPart))
+                if prefix_pending:
+                    text = f"[Інструкції]\n{system}\n\n[Повідомлення клієнта]\n{text}"
+                    prefix_pending = False
+                out.append({"role": "user", "content": text})
+            elif msg.role == "model":
+                calls = [p for p in msg.parts if isinstance(p, CallPart)]
+                last_ids = [
+                    c.signature.decode() if c.signature else f"toolu_{i}" for i, c in enumerate(calls)
+                ]
+                if msg.raw:
+                    content = msg.raw
+                else:
+                    content = [{"type": "text", "text": p.text} for p in msg.parts
+                               if isinstance(p, TextPart) and p.text]
+                    content += [{"type": "tool_use", "id": cid, "name": c.name, "input": dict(c.args)}
+                                for cid, c in zip(last_ids, calls)]
+                out.append({"role": "assistant", "content": content})
+            else:
+                results = [p for p in msg.parts if isinstance(p, ResultPart)]
+                blocks = []
+                for i, r in enumerate(results):
+                    cid = last_ids[i] if i < len(last_ids) else f"toolu_{i}"
+                    blocks.append({"type": "tool_result", "tool_use_id": cid,
+                                   "content": json.dumps(r.response, ensure_ascii=False)})
+                out.append({"role": "user", "content": blocks})
+        return out
+
+    @staticmethod
+    def _tools(tools: list[dict]) -> list[dict]:
+        return [
+            {"name": t["name"], "description": t["description"],
+             "input_schema": _lower_types(t.get("parameters") or {"type": "object", "properties": {}})}
+            for t in tools
+        ]
+
+    def generate(self, system: str, history: list[Msg], tools: list[dict]) -> Msg:
+        as_prefix = os.environ.get("AGENT_SYSTEM_AS_PREFIX") == "1"
+        kwargs: dict = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "messages": self._messages(system, history, as_prefix),
+            "output_config": {"effort": "medium"},
+        }
+        if not as_prefix:
+            kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = self._tools(tools)
+        resp = self._client.messages.create(**kwargs)
+
+        if getattr(resp, "stop_reason", None) == "refusal":
+            return Msg("model", [TextPart(self.REFUSAL)])
+        out: list = []
+        raw: list[dict] = []
+        for block in resp.content or []:
+            raw.append(block.model_dump())
+            if block.type == "text" and block.text:
+                out.append(TextPart(block.text))
+            elif block.type == "tool_use":
+                out.append(CallPart(block.name, dict(block.input or {}), block.id.encode()))
+        return Msg("model", out or [TextPart("")], raw=raw)
+
+
 def make_client() -> LLMClient:
     load_dotenv()
     provider = os.environ.get("AGENT_PROVIDER", "gemini")
@@ -278,6 +363,11 @@ def make_client() -> LLMClient:
             base_url=os.environ.get("OPENAI_BASE_URL", "http://localhost:11434/v1"),
             api_key=os.environ.get("OPENAI_API_KEY", "ollama"),
         )
+    if provider == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError("Не задано ANTHROPIC_API_KEY: додайте ключ у .env або середовище.")
+        return AnthropicClient(os.environ.get("AGENT_MODEL", "claude-sonnet-5-5"), api_key)
     if provider != "gemini":
         raise ValueError(f"Невідомий провайдер: {provider}")
     api_key = os.environ.get("GEMINI_API_KEY")
