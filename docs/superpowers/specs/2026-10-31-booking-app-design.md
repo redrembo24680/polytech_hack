@@ -32,7 +32,7 @@ id, name, kind ("salon" | "clinic"), timezone, policy: Policy
 **Policy** (правила тенанта; агент читає їх і сам вирішує, що можна)
 ```
 cancellation_window_hours: int          # напр. 24
-late_cancel_forfeits_prepayment: bool   # пізнє скасування = передоплата згорає
+late_change_forfeits_prepayment: bool   # пізнє скасування АБО перенесення = передоплата згорає
 no_show_fee: int                        # грн
 prepayment_required: bool
 agent_permissions:
@@ -89,7 +89,7 @@ history: [ {ts, event, by, note} ]        # для таймлайну в кар�
 **Дії**
 | Метод | Шлях | Тіло | Ефект |
 |---|---|---|---|
-| POST | `/bookings/{id}/reschedule` | `{start, staff_id?, reason, by}` | status лишається scheduled, start/end оновлені, передоплата переноситься, запис в history. 409 `slot_taken` якщо зайнято |
+| POST | `/bookings/{id}/reschedule` | `{start, staff_id?, reason, by, forfeit_prepayment: bool}` | status лишається scheduled, start/end оновлені; передоплата переноситься або (forfeit=true) стає forfeited; запис в history. 409 `slot_taken` якщо зайнято |
 | POST | `/bookings/{id}/cancel` | `{reason, by, forfeit_prepayment: bool}` | status=cancelled; prepayment.status = forfeited або held (далі refund окремо) |
 | POST | `/bookings/{id}/refund` | `{amount, reason, by}` | prepayment.status=refunded, amount ≤ prepayment.amount |
 | POST | `/bookings/{id}/waive-no-show` | `{reason, by}` | для status=no_show: знімає fee, запис у history |
@@ -106,7 +106,7 @@ permission engine агента. Апка перевіряє лише ціліс�
 ## 5. Сід-дані (обов'язково для демо)
 
 **Тенант A — "Lumen Beauty"** (салон), м'яка політика:
-cancellation_window 24h, late cancel forfeits prepayment, no_show_fee 300, prepayment required;
+cancellation_window 24h, late change forfeits prepayment, no_show_fee 300, prepayment required;
 permissions: reschedule auto, cancel auto, refund auto_under_limit (limit 500),
 goodwill auto (1 на 180 днів, requires zero no-shows), waive_no_show_fee approval.
 

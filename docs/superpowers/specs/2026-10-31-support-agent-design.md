@@ -60,10 +60,13 @@ web/
 Правила (у порядку перевірки):
 1. Режим дії з `agent_permissions`: `forbidden` → Forbidden; `approval` → NeedsApproval.
 2. `refund`: при `auto_under_limit` сума ≤ `refund_auto_limit` → Allow, інакше NeedsApproval.
-3. `goodwill_exception` при `auto`: Forbidden, якщо `goodwill_requires_zero_no_shows` і
-   `no_show_count > 0`; NeedsApproval, якщо за 180 днів винятків ≥ ліміту; інакше Allow.
+3. `goodwill_exception` при `auto`: NeedsApproval, якщо `goodwill_requires_zero_no_shows` і
+   `no_show_count > 0` (людина може зробити виняток, агент сам — ні); NeedsApproval, якщо за
+   180 днів винятків ≥ ліміту; інакше Allow.
 4. `reschedule`/`cancel` при `auto` → Allow. Чи згорає передоплата — окреме обчислення
-   `late_cancel(policy, booking, now) -> bool` (час до візиту < cancellation_window_hours).
+   `is_late_change(policy, booking, now) -> bool` (час до візиту < cancellation_window_hours
+   і `late_change_forfeits_prepayment`). Пізня зміна без goodwill → `forfeit_prepayment=True`
+   і для cancel, і для reschedule.
 5. `escalate` завжди Allow.
 
 Усе покривається табличними тестами без мережі.
@@ -78,8 +81,8 @@ web/
 | `get_client_profile()` | read | профіль + історія бронювань поточного клієнта |
 | `get_booking(booking_id)` | read | бронювання з деталями |
 | `find_slots(service_id, from_date, to_date, staff_id?)` | read | вільні слоти |
-| `reschedule_booking(booking_id, start, staff_id?, reason)` | write | policy → дія |
-| `cancel_booking(booking_id, reason)` | write | policy → дія; сам рахує `late_cancel` і передає `forfeit_prepayment` |
+| `reschedule_booking(booking_id, start, staff_id?, reason)` | write | policy → дія; сам рахує `is_late_change` і передає `forfeit_prepayment`, якщо goodwill не застосовано |
+| `cancel_booking(booking_id, reason)` | write | policy → дія; сам рахує `is_late_change` і передає `forfeit_prepayment` |
 | `refund_prepayment(booking_id, amount, reason)` | write | policy → дія |
 | `apply_goodwill_exception(booking_id, reason)` | write | policy → дія; при Allow також зберігає передоплату при пізньому скасуванні/перенесенні |
 | `waive_no_show_fee(booking_id, reason)` | write | policy → дія |
@@ -155,10 +158,11 @@ thinking, tool_call, tool_result, card, approval_created, approval_decided, erro
 шукає слоти, показує картку з 3 слотами, після вибору переносить, передоплата збережена, показує
 decision-картку. У copilot видно reasoning і всі tool-виклики.
 
-**B. Максим, Lumen Beauty (апрув).** Той самий запит → goodwill Forbidden (2 no-show), пізнє
-скасування → агент пояснює правила, пропонує перенесення зі збереженням передоплати тільки з
-дозволу адміністратора → `waive`/`goodwill` NeedsApproval → картка в copilot → людина схвалює →
-агент завершує і відповідає клієнту.
+**B. Максим, Lumen Beauty (апрув).** Той самий запит → goodwill NeedsApproval (2 no-show) →
+агент чесно пояснює: перенести може, але за правилами передоплата згорає, виняток має
+підтвердити адміністратор → картка в copilot з reasoning і рекомендацією → людина схвалює →
+агент застосовує виняток, переносить зі збереженням передоплати і відповідає клієнту.
+(Якщо людина відхиляє — агент пропонує перенесення зі згорянням або скасування.)
 
 **C. Петро, DentaPlus.** "Хочу скасувати і повернути гроші" → cancel approval + refund approval
 → дві approval-картки, агент коректно чекає.
