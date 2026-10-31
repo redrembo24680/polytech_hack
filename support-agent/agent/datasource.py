@@ -41,6 +41,8 @@ class DataSource(Protocol):
     def get_tenant(self, tenant_id: str) -> Tenant: ...
     def get_client(self, tenant_id: str, client_id: str) -> Client: ...
     def list_clients(self, tenant_id: str) -> list[Client]: ...
+    def list_services(self, tenant_id: str) -> list[Service]: ...
+    def list_staff(self, tenant_id: str) -> list[Staff]: ...
     def find_client_by_phone(self, tenant_id: str, phone: str) -> list[Client]: ...
     def list_client_bookings(self, tenant_id: str, client_id: str) -> list[Booking]: ...
     def get_booking(self, tenant_id: str, booking_id: str) -> Booking: ...
@@ -94,7 +96,8 @@ class MemoryDataSource(DataSource):
             start_s, end_s = s["hours"]
             self._hours[tid][s["id"]] = (time.fromisoformat(start_s), time.fromisoformat(end_s))
             self._staff[tid][s["id"]] = Staff(
-                id=s["id"], tenant_id=tid, name=s["name"], service_ids=s["service_ids"]
+                id=s["id"], tenant_id=tid, name=s["name"], service_ids=s["service_ids"],
+                hours=(start_s, end_s),
             )
         self._clients[tid] = {}
         for c in t["clients"]:
@@ -142,6 +145,14 @@ class MemoryDataSource(DataSource):
             return self._clients[tenant_id][client_id]
         except KeyError:
             raise DataError("not_found", f"Клієнта {client_id} не знайдено") from None
+
+    def list_services(self, tenant_id: str) -> list[Service]:
+        self.get_tenant(tenant_id)
+        return list(self._services[tenant_id].values())
+
+    def list_staff(self, tenant_id: str) -> list[Staff]:
+        self.get_tenant(tenant_id)
+        return list(self._staff[tenant_id].values())
 
     def list_clients(self, tenant_id: str) -> list[Client]:
         self.get_tenant(tenant_id)
@@ -354,6 +365,12 @@ class HttpDataSource(DataSource):
 
     def get_client(self, tenant_id: str, client_id: str) -> Client:
         return self._client(self._call("GET", self._t(tenant_id, f"/clients/{client_id}")))
+
+    def list_services(self, tenant_id: str) -> list[Service]:
+        return [Service.model_validate(x) for x in self._call("GET", self._t(tenant_id, "/services"))]
+
+    def list_staff(self, tenant_id: str) -> list[Staff]:
+        return [Staff.model_validate(x) for x in self._call("GET", self._t(tenant_id, "/staff"))]
 
     def list_clients(self, tenant_id: str) -> list[Client]:
         return [self._client(c) for c in self._call("GET", self._t(tenant_id, "/clients"))]

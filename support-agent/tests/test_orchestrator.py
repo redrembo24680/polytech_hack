@@ -188,3 +188,18 @@ def test_prompt_contains_glossary_and_fewshot():
     assert "відмінити" in text and "скасувати" in text
     assert "та ви шо, знову списали" in text
     assert "emotion" in text and "normalized" in text
+
+
+def test_answerer_prompt_contains_facts_block():
+    from agent.orchestrator import Answerer
+
+    seen = {}
+
+    class Spy(FakeListChatModel):
+        def _call(self, messages, *a, **k):
+            seen["p"] = "\n".join(str(m.content) for m in messages)
+            return "ок"
+
+    Answerer(Spy(responses=["x"]), "g").answer("години?", "Години роботи: Пн–Сб 10:00–19:00", "клієнт")
+    assert "Години роботи: Пн–Сб 10:00–19:00" in seen["p"]
+    assert "не вигадуй" in seen["p"]

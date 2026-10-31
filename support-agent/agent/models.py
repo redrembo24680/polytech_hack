@@ -34,6 +34,10 @@ class Tenant(BaseModel):
     kind: Literal["salon", "clinic"]
     timezone: str
     policy: Policy
+    description: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    instagram: str | None = None
 
 
 class GoodwillException(BaseModel):
@@ -55,6 +59,12 @@ class Client(BaseModel):
     notes: str = ""
 
 
+class ScheduleRow(BaseModel):
+    weekday: int  # 0 = понеділок
+    start: str
+    end: str
+
+
 class Staff(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -62,6 +72,8 @@ class Staff(BaseModel):
     tenant_id: str
     name: str
     service_ids: list[str]
+    schedule: list[ScheduleRow] = Field(default_factory=list)  # порожній = щодня за `hours`
+    hours: tuple[str, str] | None = None
 
 
 class Service(BaseModel):

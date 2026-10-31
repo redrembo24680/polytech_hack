@@ -57,8 +57,10 @@ answer — лише для простих питань без терміново
 "register":"casual","normalized":"Клієнт дякує і прощається","route":"agent","hint":""}}"""
 SYSTEM_PROMPT = SYSTEM_PROMPT.replace("{GLOSSARY}", render_glossary().replace("{", "{{").replace("}", "}}"))
 
-ANSWER_PROMPT_TEXT = ("Ти асистент підтримки закладу. Відповідай коротко і по суті лише на інформаційні питання, "
-                      "спираючись на правила закладу. Не обіцяй дій.\n\nПравила закладу:\n{tenant_rules}\n\n"
+ANSWER_PROMPT_TEXT = ("Ти асистент підтримки закладу. Відповідай коротко (не більше 3 речень) лише на "
+                      "інформаційні питання. Відповідай лише на основі фактів нижче; якщо факту немає — скажи, "
+                      "що уточниш у адміністратора, не вигадуй. Про оплату: якщо немає інформації — скажи, що "
+                      "уточниш. Не обіцяй дій.\n\nФакти про заклад:\n{tenant_facts}\n\n"
                       "Клієнт: {client_summary}")
 ANSWER_PROMPT = ChatPromptTemplate.from_messages([("system", ANSWER_PROMPT_TEXT), ("human", "{question}")])
 
@@ -112,9 +114,9 @@ class Answerer:
         self.model_name, self.timeout_s = model_name, timeout_s
         self._chain = ANSWER_PROMPT | chat_model | StrOutputParser()
 
-    def answer(self, question: str, tenant_rules: str, client_summary: str) -> str | None:
+    def answer(self, question: str, tenant_facts: str, client_summary: str) -> str | None:
         try:
-            out = self._chain.invoke({"question": question, "tenant_rules": tenant_rules,
+            out = self._chain.invoke({"question": question, "tenant_facts": tenant_facts,
                                       "client_summary": client_summary},
                                      config={"timeout": self.timeout_s})
             return str(out).strip() or None
@@ -172,7 +174,8 @@ def _make_answerer() -> Answerer | None:
 
     model = os.environ.get("ANSWERER_MODEL", "gemma4:12b")
     base_url = os.environ.get("ANSWERER_BASE_URL", "http://localhost:11434")
-    return Answerer(ChatOllama(model=model, base_url=base_url, temperature=0), model)
+    return Answerer(ChatOllama(model=model, base_url=base_url, temperature=0, reasoning=False,
+                               num_predict=384), model)
 
 
 def make_orchestrator() -> Orchestrator | None:

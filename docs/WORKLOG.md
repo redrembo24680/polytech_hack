@@ -94,3 +94,4 @@
 - Телефонний канал через Vapi: `agent/voice.py` (вебхук tools, сесія voice:{tenant}:{phone}, show_card -> SMS), `scripts/vapi_setup.py`, README "Телефонія через Vapi"; 186 тестів.
 - Інтеграція з платформою тіммейта: `HttpDataSource` + `make_datasource` (`APP_API_URL`), `RULES_TEXT_OVERRIDES`, `list_tenants` + `GET /tenants` (селектор тенантів у UI), чат-вебхук `POST /chat` (`agent/chat_webhook.py`, спільні `agent/sessions.py`), документація й README "Підключення до платформи тіммейта"; 218 тестів.
 - Доставка відповіді після апруву (чат сайту через `/support/conversations/{id}/reply`, SMS для голосу), канальний промпт без карток, `identify_caller` для веб-дзвінків Vapi, селектор клієнтів у UI (демо першими, до 15); 227 тестів.
+- Gemma 4 12B локально працює як відповідач (наживо); відповідачу передаються факти закладу (години, послуги, контакти).

@@ -141,3 +141,16 @@ def test_make_datasource(monkeypatch):
     assert isinstance(make_datasource(lambda: NOW), MemoryDataSource)
     monkeypatch.setenv("APP_API_URL", "http://x:1")
     assert isinstance(make_datasource(lambda: NOW), HttpDataSource)
+
+
+def test_list_services_and_staff():
+    def handler(req):
+        if req.url.path.endswith("/services"):
+            return httpx.Response(200, json=[{"id": "s", "tenant_id": "lumen", "name": "Стрижка",
+                                              "duration_min": 60, "price": 800}])
+        return httpx.Response(200, json=[{"id": "m", "tenant_id": "lumen", "name": "Марія", "service_ids": ["s"],
+                                          "schedule": [{"weekday": 0, "start": "10:00", "end": "19:00"}]}])
+
+    ds = HttpDataSource("http://x", transport=httpx.MockTransport(handler))
+    assert ds.list_services("lumen")[0].price == 800
+    assert ds.list_staff("lumen")[0].schedule[0].end == "19:00"
