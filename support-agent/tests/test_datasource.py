@@ -1,0 +1,168 @@
+from datetime import timedelta
+
+import pytest
+
+from agent.datasource import DataError, MemoryDataSource
+from tests.conftest import NOW, SEED_PATH
+
+
+def test_get_tenant_policy(ds):
+    t = ds.get_tenant("lumen")
+    assert t.policy.agent_permissions.refund == "auto_under_limit"
+    assert t.policy.agent_permissions.refund_auto_limit == 500
+    assert "24 годин" in t.policy.rules_text
+
+
+def test_get_client_with_bookings(ds):
+    c = ds.get_client("lumen", "olena")
+    assert (c.visits_count, c.no_show_count) == (12, 0)
+    assert ds.list_client_bookings("lumen", "olena")[0].id == "b-olena-1"
+
+
+def test_booking_start_is_tomorrow_10(ds):
+    b = ds.get_booking("lumen", "b-olena-1")
+    assert b.start == NOW.replace(hour=10, minute=0) + timedelta(days=1)
+    assert b.prepayment.amount == 500 and b.prepayment.status == "held"
+
+
+def test_unknown_booking_raises_not_found(ds):
+    with pytest.raises(DataError) as e:
+        ds.get_booking("lumen", "nope")
+    assert e.value.code == "not_found"
+
+
+def test_find_slots_excludes_taken(ds):
+    slots = ds.find_slots("lumen", "svc-cut", NOW + timedelta(days=1), NOW + timedelta(days=2), staff_id="st-maria")
+    starts = [s.start for s in slots]
+    assert NOW.replace(hour=10, minute=0) + timedelta(days=1) not in starts  # зайнято Оленою
+    assert NOW.replace(hour=11, minute=0) + timedelta(days=1) in starts
+    assert len(slots) >= 3
+
+
+def test_reschedule_moves_and_keeps_prepayment(ds):
+    new = NOW.replace(hour=14, minute=0) + timedelta(days=2)
+    b = ds.reschedule("lumen", "b-olena-1", new, "st-maria", "хвороба", "agent", forfeit_prepayment=False)
+    assert b.start == new and b.prepayment.status == "held" and b.history[-1].event == "rescheduled"
+
+
+def test_reschedule_to_taken_slot_raises(ds):
+    taken = ds.get_booking("lumen", "b-max-1").start
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", taken, "st-olha", "x", "agent", False)
+    assert e.value.code == "slot_taken"
+
+
+def test_reschedule_cancelled_is_invalid_state(ds):
+    ds.cancel("lumen", "b-olena-1", "x", "agent", forfeit_prepayment=False)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", NOW + timedelta(days=3), None, "x", "agent", False)
+    assert e.value.code == "invalid_state"
+
+
+def test_cancel_forfeits(ds):
+    b = ds.cancel("lumen", "b-max-1", "late", "agent", forfeit_prepayment=True)
+    assert b.status == "cancelled" and b.prepayment.status == "forfeited"
+
+
+def test_refund_over_amount_is_validation(ds):
+    with pytest.raises(DataError) as e:
+        ds.refund("lumen", "b-olena-1", 900, "x", "agent")
+    assert e.value.code == "validation"
+
+
+def test_refund_marks_refunded(ds):
+    assert ds.refund("lumen", "b-olena-1", 500, "x", "agent").prepayment.status == "refunded"
+
+
+def test_refund_twice_is_invalid_state(ds):
+    ds.refund("lumen", "b-olena-1", 500, "x", "agent")
+    with pytest.raises(DataError) as e:
+        ds.refund("lumen", "b-olena-1", 1, "x", "agent")
+    assert e.value.code == "invalid_state"
+
+
+def test_waive_no_show_only_for_no_show(ds):
+    assert ds.waive_no_show("denta", "b-anna-1", "x", "human:Оля").history[-1].event == "no_show_fee_waived"
+    with pytest.raises(DataError):
+        ds.waive_no_show("lumen", "b-olena-1", "x", "agent")
+
+
+def test_goodwill_message_ticket(ds):
+    c = ds.add_goodwill("lumen", "olena", "b-olena-1", "хвороба дитини", "agent")
+    assert c.goodwill_exceptions[-1].booking_id == "b-olena-1"
+    assert ds.send_message("lumen", "olena", "chat", "привіт").text == "привіт"
+    assert ds.create_ticket("lumen", "olena", "складний кейс", "high").status == "open"
+
+
+def test_ira_has_used_exception_30_days_ago(ds):
+    ex = ds.get_client("lumen", "ira").goodwill_exceptions
+    assert len(ex) == 1 and (NOW - ex[0].date).days == 30
+
+
+def test_reschedule_to_past_is_validation(ds):
+    past = NOW.replace(hour=10, minute=0) - timedelta(days=1)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", past, "st-maria", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_reschedule_outside_working_hours_is_validation(ds):
+    night = NOW.replace(hour=3, minute=0) + timedelta(days=2)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", night, "st-maria", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_reschedule_to_staff_without_service_is_validation(ds):
+    ds._staff["lumen"]["st-olha"].service_ids = []
+    new = NOW.replace(hour=14, minute=0) + timedelta(days=2)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", new, "st-olha", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_data_error_messages_are_ukrainian(ds):
+    with pytest.raises(DataError) as e:
+        ds.get_booking("lumen", "nope")
+    assert "не знайдено" in e.value.message
+
+
+def test_cancel_after_refund_keeps_refunded(ds):
+    ds.refund("lumen", "b-olena-1", 500, "x", "agent")
+    b = ds.cancel("lumen", "b-olena-1", "late", "agent", forfeit_prepayment=True)
+    assert b.status == "cancelled" and b.prepayment.status == "refunded"
+
+
+def test_reschedule_forfeit_only_from_held(ds):
+    ds.refund("lumen", "b-olena-1", 500, "x", "agent")
+    new = NOW.replace(hour=14, minute=0) + timedelta(days=2)
+    b = ds.reschedule("lumen", "b-olena-1", new, None, "x", "agent", forfeit_prepayment=True)
+    assert b.prepayment.status == "refunded"
+
+
+def test_demo_bookings_relative_to_start_hour(ds):
+    tomorrow = NOW + timedelta(days=1)
+    assert ds.get_booking("lumen", "b-olena-1").start == tomorrow.replace(hour=10)
+    assert ds.get_booking("lumen", "b-max-1").start == tomorrow.replace(hour=11)
+    assert ds.get_booking("denta", "b-petro-1").start == tomorrow.replace(hour=9)
+    assert ds.get_booking("lumen", "b-ira-1").start == (NOW + timedelta(days=3)).replace(hour=15)
+    assert ds.get_booking("denta", "b-anna-1").start == (NOW - timedelta(days=1)).replace(hour=10)
+
+
+def test_hours_ahead_rounds_now_down_to_full_hour():
+    late = NOW.replace(hour=15, minute=37, second=12)
+    ds = MemoryDataSource.from_file(SEED_PATH, late)
+    b = ds.get_booking("lumen", "b-olena-1")
+    assert b.start == NOW.replace(hour=13) + timedelta(days=1)
+    assert b.end - b.start == timedelta(minutes=60)
+
+
+def test_now_fn_drives_validation_and_history():
+    later = NOW + timedelta(days=2)
+    ds = MemoryDataSource.from_file(SEED_PATH, NOW, now_fn=lambda: later)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-ira-1", NOW.replace(hour=14) + timedelta(days=1), None, "x", "agent", False)
+    assert e.value.code == "validation"
+    b = ds.cancel("lumen", "b-olena-1", "x", "agent", False)
+    assert b.history[-1].ts == later
+    assert ds.add_goodwill("lumen", "olena", "b-olena-1", "x", "agent").goodwill_exceptions[-1].date == later
