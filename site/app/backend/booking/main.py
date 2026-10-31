@@ -14,6 +14,15 @@ def create_app(init_db: bool = True) -> FastAPI:
         if init_db:
             from booking.db import Base, engine
             Base.metadata.create_all(engine)
+            from sqlalchemy import select
+
+            from booking import clock
+            from booking.db import SessionLocal
+            from booking.models import Tenant
+            from booking.seed import seed
+            with SessionLocal() as s:
+                if s.scalars(select(Tenant.id).limit(1)).first() is None:
+                    seed(s, clock.now())
         yield
 
     app = FastAPI(title="Booking API", lifespan=lifespan)
@@ -24,6 +33,9 @@ def create_app(init_db: bool = True) -> FastAPI:
         allow_headers=["*"],
     )
     register_error_handlers(app)
+
+    from booking.routers import admin
+    app.include_router(admin.router)
 
     @app.get("/api/health")
     def health():

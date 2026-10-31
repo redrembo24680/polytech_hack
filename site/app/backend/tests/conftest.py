@@ -41,6 +41,14 @@ def _clean_db(_schema):
 
 
 @pytest.fixture(autouse=True)
+def _seeded(_clean_db):
+    from booking.seed import seed
+    with TestSession() as s:
+        seed(s, NOW)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _frozen_clock(monkeypatch):
     monkeypatch.setattr(clock, "now", lambda: NOW)
 
