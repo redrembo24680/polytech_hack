@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Уся наша частина живе в `site/` у корені репо.** Усі шляхи в цьому плані (`docker-compose.yml`, `app/…`, `docs/…`) — відносно `site/`; команди запускаються з `site/` (напр. `cd site && docker compose up`).
-- Порти: db 5432, backend 8001, mcp 8002, web 3000. MCP шлях: `/mcp`.
+- Порти: db 5433 на хості (5432 в контейнері; локальний Homebrew Postgres займає 5432), backend 8001, mcp 8002, web 3000. MCP шлях: `/mcp`.
 - Env: `DATABASE_URL`, `AGENT_URL` (опц.), `APP_API_URL` (MCP; у Docker `http://backend:8001`), `NEXT_PUBLIC_API_URL` (`http://localhost:8001`).
 - Усі id — рядки. Сід: людські slug (`lumen`, `dentaplus`, `olena`, `b-olena-1` …); нові — `f"{prefix}-{secrets.token_hex(3)}"`.
 - Час — ISO 8601 з офсетом; таймзона тенантів `Europe/Kyiv`. Datetime без офсету на вході → 422 `validation`.
