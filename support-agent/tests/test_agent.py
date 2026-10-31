@@ -189,7 +189,7 @@ class _FakeAnswerer:
     def __init__(self, reply):
         self.reply = reply
 
-    def answer(self, question, tenant_rules, client_summary):
+    def answer(self, question, tenant_facts, client_summary):
         return self.reply
 
 
@@ -307,3 +307,19 @@ def test_prompt_strict_tenant_waive_is_forbidden(ds):
     p = build_system_prompt(ds.get_tenant("denta"), ds.get_client("denta", ds.list_clients("denta")[0].id), NOW)
     line = next(l for l in p.splitlines() if l.startswith("- Зняття штрафу"))
     assert "заборонено" in line
+
+
+def test_session_tenant_facts_has_services_and_hours(sess_factory):
+    s = sess_factory("lumen", "olena", FakeClient([]))
+    assert "Стрижка" in s.tenant_facts
+    assert "10:00" in s.tenant_facts
+    assert "Lumen" in s.tenant_facts or "lumen" in s.tenant_facts.lower()
+
+
+def test_hours_merged_from_site_schedule():
+    from agent.agent import _hours_lines
+    from agent.models import Staff
+
+    rows = [{"weekday": d, "start": "10:00", "end": "19:00"} for d in range(6)]
+    st = Staff(id="s", tenant_id="t", name="n", service_ids=[], schedule=rows)
+    assert _hours_lines([st]) == ["Пн–Сб 10:00–19:00"]

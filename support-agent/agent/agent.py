@@ -207,6 +207,65 @@ def _execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
                 "detail": f"{type(e).__name__}: {e}"}
 
 
+_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд")
+
+
+def _hours_lines(staff: list) -> list[str]:
+    """Об'єднані години роботи: «Пн–Сб 10:00–19:00» (за днями тижня, по всіх майстрах)."""
+    per_day: dict[int, set[tuple[str, str]]] = {}
+    for st in staff:
+        rows = [(r.weekday, r.start, r.end) for r in st.schedule]
+        if not rows and st.hours:
+            rows = [(d, st.hours[0], st.hours[1]) for d in range(7)]
+        for d, a, b in rows:
+            per_day.setdefault(d, set()).add((a, b))
+    merged: dict[int, tuple[str, str]] = {d: (min(a for a, _ in v), max(b for _, b in v))
+                                          for d, v in per_day.items()}
+    out, days = [], sorted(merged)
+    i = 0
+    while i < len(days):
+        j = i
+        while j + 1 < len(days) and days[j + 1] == days[j] + 1 and merged[days[j + 1]] == merged[days[i]]:
+            j += 1
+        a, b = merged[days[i]]
+        label = _DAYS[days[i]] if i == j else f"{_DAYS[days[i]]}–{_DAYS[days[j]]}"
+        out.append(f"{label} {a}–{b}")
+        i = j + 1
+    if len(out) == 1 and out[0].startswith("Пн–Нд"):
+        out[0] = "щодня" + out[0][len("Пн–Нд"):]
+    return out
+
+
+def build_tenant_facts(ds: DataSource, tenant_id: str) -> str:
+    t = ds.get_tenant(tenant_id)
+    kinds = {"salon": "салон", "clinic": "клініка"}
+    lines = [f"Назва: {t.name}", f"Тип: {kinds.get(t.kind, t.kind)}"]
+    for label, val in (("Опис", t.description), ("Адреса", t.address), ("Телефон", t.phone),
+                       ("Instagram", t.instagram)):
+        if val:
+            lines.append(f"{label}: {val}")
+    try:
+        staff = ds.list_staff(tenant_id)
+    except Exception:
+        staff = []
+    try:
+        services = ds.list_services(tenant_id)
+    except Exception:
+        services = []
+    hours = _hours_lines(staff)
+    if hours:
+        lines.append("Години роботи: " + "; ".join(hours))
+    if services:
+        lines.append("Послуги:")
+        lines += [f"- {s.name}: {s.duration_min} хв, {s.price} грн" for s in services]
+    p = t.policy
+    if p.rules_text:
+        lines.append(f"Правила закладу:\n{p.rules_text}")
+    lines.append("Передоплата: " + ("потрібна" if p.prepayment_required else "не потрібна"))
+    lines.append(f"Безкоштовне скасування/перенесення не пізніше ніж за {p.cancellation_window_hours} год")
+    return "\n".join(lines)
+
+
 class Session:
     def __init__(self, id: str, tenant_id: str, client_id: str, channel: str, ds: DataSource,
                  events: EventLog, approvals: ApprovalStore, llm: LLMClient,
@@ -221,6 +280,10 @@ class Session:
         self.history: list[Msg] = []
         self.ctx = SessionCtx(id, tenant_id, client_id, now_fn(), ds, events, approvals)
         self.system = self._build_system()
+        try:
+            self.tenant_facts = build_tenant_facts(ds, tenant_id)
+        except Exception:
+            self.tenant_facts = ""
 
     def prompt_channel(self) -> str:
         if self.channel == "voice":
@@ -243,7 +306,7 @@ class Session:
         summary = (f"{c.name}, візитів: {c.visits_count}, неявок: {c.no_show_count}, "
                    f"винятків з доброї волі: {len(c.goodwill_exceptions)}")
         try:
-            return answerer.answer(text, tenant.policy.rules_text, summary)
+            return answerer.answer(text, self.tenant_facts or tenant.policy.rules_text, summary)
         except Exception:
             return None
 
