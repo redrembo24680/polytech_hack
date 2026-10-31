@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { api, ApiError, useApi } from "@/lib/api";
-import type { Booking, Service, Slot, Staff, Tenant } from "@/lib/types";
+import type { Booking, PublicTenant, Service, Slot, Staff } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { dayBoundary, dayLabel, formatPrice, formatDuration, formatTime, nextDays } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
@@ -41,7 +41,7 @@ function Choice({ selected, onClick, children }: { selected: boolean; onClick: (
   );
 }
 
-export function BookingFlow({ tenant, services, staff }: { tenant: Tenant; services: Service[]; staff: Staff[] }) {
+export function BookingFlow({ tenant, services, staff }: { tenant: PublicTenant; services: Service[]; staff: Staff[] }) {
   const toast = useToast();
   const tz = tenant.timezone;
   const days = useMemo(() => nextDays(7, tz), [tz]);
@@ -87,7 +87,7 @@ export function BookingFlow({ tenant, services, staff }: { tenant: Tenant; servi
   };
 
   const submit = async () => {
-    if (!service || !chosen) return;
+    if (submitting || !service || !chosen) return;
     const next: typeof errors = {};
     if (!name.trim()) next.name = "Вкажіть ім'я";
     if (!phone.trim()) next.phone = "Вкажіть телефон";

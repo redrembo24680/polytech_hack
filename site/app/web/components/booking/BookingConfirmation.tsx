@@ -1,4 +1,4 @@
-import type { Booking, Tenant } from "@/lib/types";
+import type { Booking, PublicTenant } from "@/lib/types";
 import { formatDateTime, formatPrice } from "@/lib/format";
 import { LinkButton } from "@/components/ui/Button";
 
@@ -8,7 +8,7 @@ export function BookingConfirmation({
   serviceName,
   staffName,
 }: {
-  tenant: Tenant;
+  tenant: PublicTenant;
   booking: Booking;
   serviceName: string;
   staffName: string;

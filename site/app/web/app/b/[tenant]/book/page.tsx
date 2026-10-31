@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api-core";
-import type { Service, Staff, Tenant } from "@/lib/types";
+import { toPublicTenant, type Service, type Staff, type Tenant } from "@/lib/types";
 import { BookingFlow } from "@/components/booking/BookingFlow";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function BookPage(props: PageProps<"/b/[tenant]/book">) {
     <div className="mx-auto max-w-2xl">
       <Link href={`/b/${id}`} className="text-sm text-accent-700 hover:underline">← {data.tenant.name}</Link>
       <h1 className="mt-2 text-2xl font-semibold text-slate-900">Онлайн-запис</h1>
-      <BookingFlow {...data} />
+      <BookingFlow tenant={toPublicTenant(data.tenant)} services={data.services} staff={data.staff} />
     </div>
   );
 }

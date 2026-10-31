@@ -168,3 +168,20 @@ export interface ChatMessage {
   text: string;
   ts: string;
 }
+
+/** Narrow tenant shape safe to send to client components (no agent_permissions). */
+export interface PublicTenant {
+  id: string;
+  name: string;
+  timezone: string;
+  policy: { prepayment_required: boolean };
+}
+
+export function toPublicTenant(t: Tenant): PublicTenant {
+  return {
+    id: t.id,
+    name: t.name,
+    timezone: t.timezone,
+    policy: { prepayment_required: t.policy.prepayment_required },
+  };
+}
