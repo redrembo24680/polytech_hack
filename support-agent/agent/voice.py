@@ -51,6 +51,8 @@ def voice_registry(session_ref: list):
 
     def identify_caller(phone: str) -> dict:
         session: Session = session_ref[0]
+        if session.client_id is not None:
+            return {"error": "already_identified", "message": "Ви вже ідентифіковані за номером дзвінка."}
         found = session.ds.find_client_by_phone(session.tenant_id, normalize_phone(phone))
         if not found:
             return {"error": "not_found", "message": NOT_FOUND_TEXT}
@@ -94,9 +96,10 @@ def run_tool(app, tenant: str, phone: str, name: str, args: dict, call_id: str =
             clients = st.ds.find_client_by_phone(tenant, normalize_phone(phone))
         except DataError as e:
             return json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False)
-        if not clients:
-            return NOT_FOUND_TEXT
-        session = _session_for(app, tenant, clients[0])
+        if clients:
+            session = _session_for(app, tenant, clients[0])
+        else:  # номер дзвінка невідомий у даних: незв'язана сесія, клієнт назве номер через identify_caller
+            session = _new_session(app, f"voice:{tenant}:call:{call_id}", tenant, None, None)
     else:  # веб-дзвінок без номера: сесія за call.id, лише identify_caller до прив'язки
         session = _new_session(app, f"voice:{tenant}:call:{call_id}", tenant, None, None)
     with st.locks[session.id]:
@@ -148,8 +151,8 @@ def vapi_tools(request: Request, body: dict):
     return {"results": results}
 
 
-@router.post("/voice/tools/{tool_name}")
 def manual_tool(tool_name: str, request: Request, body: dict):
     tenant = body.get("tenant_id") or os.environ.get("VOICE_TENANT_ID") or "lumen"
     text = run_tool(request.app, tenant, body.get("phone", ""), tool_name, _args(body.get("args")))
     return JSONResponse({"result": text})
+

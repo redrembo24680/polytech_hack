@@ -32,7 +32,21 @@ def test_profile_lookup():
 def test_unknown_phone():
     c, _ = make()
     r = c.post("/voice/tools", json=body("+380990000000", "get_client_profile"))
-    assert r.status_code == 200 and "не знайдено" in r.json()["results"][0]["result"]
+    assert r.status_code == 200 and "номер телефону" in r.json()["results"][0]["result"]
+
+
+def test_unknown_caller_id_can_identify_by_spoken_phone():
+    c, _ = make()
+    r = c.post("/voice/tools", json=body("+380990000000", "identify_caller", {"phone": "0501110001"}))
+    assert '"identified"' in r.json()["results"][0]["result"]
+
+
+def test_identify_caller_cannot_rebind():
+    c, _ = make()
+    r = c.post("/voice/tools", json=body(OLENA, "identify_caller", {"phone": MAX}))
+    assert "already_identified" in r.json()["results"][0]["result"]
+    s = c.app.state.sessions["voice:lumen:+380501110001"]
+    assert s.client_id == "olena"
 
 
 def test_write_creates_pending_approval():
@@ -59,7 +73,13 @@ def test_session_reuse():
     assert n1 > 0 and n2 > n1
 
 
-def test_manual_endpoint_and_show_card_sms():
+def test_manual_endpoint_off_by_default():
+    c, _ = make()
+    assert c.post("/voice/tools/get_client_profile", json={"phone": OLENA}).status_code in (404, 405)
+
+
+def test_manual_endpoint_and_show_card_sms(monkeypatch):
+    monkeypatch.setenv("VOICE_MANUAL", "1")
     c, ds = make()
     card = {"type": "decision", "title": "Т", "outcome": "О", "reasoning": ["а"], "actions_taken": ["б"]}
     r = c.post("/voice/tools/show_card", json={"phone": OLENA, "args": {"card": card}})
