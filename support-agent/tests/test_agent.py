@@ -294,3 +294,16 @@ def test_prompt_channel_cards_section(ds):
     for ch in ("chat", "voice"):
         p = build_system_prompt(t, cl, NOW, channel=ch)
         assert "нумерованим списком" in p and "booking_summary" not in p
+
+
+def test_prompt_permissions_say_who_decides_and_never_refuse(ds):
+    p = build_system_prompt(ds.get_tenant("lumen"), ds.get_client("lumen", "olena"), NOW)
+    assert "рішення приймає адміністратор" in p
+    assert "Ніколи не відмовляй" in p
+    assert "Не пропонуй «передати адміністратору» словами" in p
+
+
+def test_prompt_strict_tenant_waive_is_forbidden(ds):
+    p = build_system_prompt(ds.get_tenant("denta"), ds.get_client("denta", ds.list_clients("denta")[0].id), NOW)
+    line = next(l for l in p.splitlines() if l.startswith("- Зняття штрафу"))
+    assert "заборонено" in line
