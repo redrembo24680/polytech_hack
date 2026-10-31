@@ -113,3 +113,49 @@ def test_tenant_endpoint_lists_clients():
     assert body["tenant"]["id"] == "lumen"
     assert "max" in {x["id"] for x in body["clients"]}
     assert c.get("/tenants/nope").status_code == 404
+
+
+def test_execute_runs_under_session_lock(monkeypatch):
+    import agent.main as m
+
+    c, _, ap = _pending([Msg("model", [TextPart("ok")])])
+    seen = {}
+    real = m.execute_approved
+
+    def spy(approval, ctx):
+        seen["locked"] = c.app.state.locks[approval.session_id].locked()
+        return real(approval, ctx)
+
+    monkeypatch.setattr(m, "execute_approved", spy)
+    r = c.post(f"/approvals/{ap['id']}/decide", json={"approve": True, "note": None, "by": "Оля"})
+    assert r.status_code == 200 and seen["locked"] is True
+    assert r.json()["result"]["status"] == "done" and r.json()["reply"] == "ok"
+
+
+def test_framework_errors_are_flat():
+    c, _ = make([])
+    sid = new_session(c)
+    r = c.get(f"/sessions/{sid}/events", params={"after": "abc"})
+    assert r.status_code == 422 and r.json()["error"] == "validation"
+    r = c.get("/nope")
+    assert r.status_code == 404 and r.json()["error"] == "not_found"
+    r = c.delete("/sessions")
+    assert r.status_code == 405 and r.json()["error"] == "method_not_allowed"
+
+
+def test_resume_failure_returns_result(monkeypatch):
+    from agent.agent import Session
+
+    c, _, ap = _pending()
+
+    def boom(self, approval, result):
+        raise RuntimeError("kaput")
+
+    monkeypatch.setattr(Session, "resume_after_approval", boom)
+    r = c.post(f"/approvals/{ap['id']}/decide", json={"approve": True, "note": None, "by": "Оля"})
+    body = r.json()
+    assert r.status_code == 200 and body["reply"] is None
+    assert body["result"]["status"] == "done" and body["approval"]["status"] == "approved"
+    assert body["error"]["error"] == "resume_failed"
+    evs = c.get("/sessions/s-1/events").json()["events"]
+    assert evs[-1]["type"] == "error" and evs[-1]["payload"]["message"] == "kaput"

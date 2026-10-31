@@ -5,11 +5,14 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agent.agent import Session, execute_approved
 from agent.datasource import DataError, MemoryDataSource
@@ -54,6 +57,17 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, e: ApiError):
         return JSONResponse({"error": e.error, "message": e.message}, status_code=e.status)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(_: Request, e: RequestValidationError):
+        return JSONResponse({"error": "validation", "message": "Некоректний запит.",
+                             "detail": jsonable_encoder(e.errors())}, status_code=422)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(_: Request, e: StarletteHTTPException):
+        codes = {404: ("not_found", "Не знайдено."), 405: ("method_not_allowed", "Метод не підтримується.")}
+        error, message = codes.get(e.status_code, ("http_error", "Помилка запиту."))
+        return JSONResponse({"error": error, "message": message}, status_code=e.status_code)
 
     def lookup(call, *args):
         try:
@@ -114,9 +128,15 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
         lookup(ds.get_tenant, tenant_id)
         return metrics(st.events, st.approvals, tenant_id)
 
-    def finish(session: Session, approval, result: dict) -> str:
+    def finish(session: Session, approval, execute: bool) -> tuple[dict, str | None, dict | None]:
         with st.locks[session.id]:
-            return session.resume_after_approval(approval, result)
+            result = execute_approved(approval, session.ctx) if execute else {"status": "rejected"}
+            try:
+                return result, session.resume_after_approval(approval, result), None
+            except Exception as e:
+                st.events.emit(session.id, session.tenant_id, "error", {"message": str(e)})
+                return result, None, {"error": "resume_failed",
+                                      "message": "Дію виконано, але агент не зміг продовжити розмову."}
 
     @app.post("/approvals/{approval_id}/decide")
     async def decide(approval_id: str, body: Decision):
@@ -129,9 +149,9 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
             approval = st.approvals.decide(approval_id, body.approve, body.by, body.note)
         except ValueError:
             raise ApiError(409, "already_decided", "Апрув уже оброблено") from None
-        result = execute_approved(approval, session.ctx) if body.approve else {"status": "rejected"}
-        reply = await run_in_threadpool(finish, session, approval, result)
-        return {"approval": approval.model_dump(mode="json"), "result": result, "reply": reply}
+        result, reply, error = await run_in_threadpool(finish, session, approval, body.approve)
+        out = {"approval": approval.model_dump(mode="json"), "result": result, "reply": reply}
+        return {**out, "error": error} if error else out
 
     if os.path.isdir(ROOT / "web"):
         app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")
