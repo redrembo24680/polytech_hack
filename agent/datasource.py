@@ -40,6 +40,21 @@ class DataSource(Protocol):
     def find_slots(
         self, tenant_id: str, service_id: str, from_dt: datetime, to_dt: datetime, staff_id: str | None = None
     ) -> list[Slot]: ...
+    def _validate_start(self, tenant_id: str, service_id: str, staff_id: str, start: datetime, end: datetime) -> None:
+        if start < self._now:
+            raise DataError("validation", "Не можна перенести бронювання на час у минулому")
+        if service_id not in self._staff[tenant_id][staff_id].service_ids:
+            raise DataError("validation", "Цей майстер не надає обрану послугу")
+        tz = ZoneInfo(self._tenants[tenant_id].timezone)
+        local_start, local_end = start.astimezone(tz), end.astimezone(tz)
+        open_t, close_t = self._hours[tenant_id][staff_id]
+        if (
+            local_start.date() != local_end.date()
+            or local_start.time() < open_t
+            or local_end.time() > close_t
+        ):
+            raise DataError("validation", "Цей час поза робочими годинами майстра")
+
     def reschedule(
         self, tenant_id: str, booking_id: str, start: datetime, staff_id: str | None,
         reason: str, by: str, forfeit_prepayment: bool,
@@ -118,14 +133,14 @@ class MemoryDataSource(DataSource):
         try:
             return self._tenants[tenant_id]
         except KeyError:
-            raise DataError("not_found", f"Tenant {tenant_id} not found") from None
+            raise DataError("not_found", f"Тенанта {tenant_id} не знайдено") from None
 
     def get_client(self, tenant_id: str, client_id: str) -> Client:
         self.get_tenant(tenant_id)
         try:
             return self._clients[tenant_id][client_id]
         except KeyError:
-            raise DataError("not_found", f"Client {client_id} not found") from None
+            raise DataError("not_found", f"Клієнта {client_id} не знайдено") from None
 
     def find_client_by_phone(self, tenant_id: str, phone: str) -> list[Client]:
         self.get_tenant(tenant_id)
@@ -141,7 +156,7 @@ class MemoryDataSource(DataSource):
         try:
             return self._bookings[tenant_id][booking_id]
         except KeyError:
-            raise DataError("not_found", f"Booking {booking_id} not found") from None
+            raise DataError("not_found", f"Бронювання {booking_id} не знайдено") from None
 
     # ---- availability ----
 
@@ -158,7 +173,7 @@ class MemoryDataSource(DataSource):
         tenant = self.get_tenant(tenant_id)
         service = self._services[tenant_id].get(service_id)
         if service is None:
-            raise DataError("not_found", f"Service {service_id} not found")
+            raise DataError("not_found", f"Послугу {service_id} не знайдено")
         tz = ZoneInfo(tenant.timezone)
         duration = timedelta(minutes=service.duration_min)
         staff_list = [
@@ -192,11 +207,12 @@ class MemoryDataSource(DataSource):
     ) -> Booking:
         b = self.get_booking(tenant_id, booking_id)
         if b.status != "scheduled":
-            raise DataError("invalid_state", f"Booking {booking_id} is {b.status}, cannot reschedule")
+            raise DataError("invalid_state", f"Бронювання {booking_id} має статус {b.status}, перенести неможливо")
         target_staff = staff_id or b.staff_id
         if target_staff not in self._staff[tenant_id]:
-            raise DataError("not_found", f"Staff {target_staff} not found")
+            raise DataError("not_found", f"Майстра {target_staff} не знайдено")
         end = start + (b.end - b.start)
+        self._validate_start(tenant_id, b.service_id, target_staff, start, end)
         if not self._is_free(tenant_id, target_staff, start, end, ignore=b.id):
             raise DataError("slot_taken", "Цей слот уже зайнятий")
         b.start, b.end, b.staff_id = start, end, target_staff
@@ -208,7 +224,7 @@ class MemoryDataSource(DataSource):
     def cancel(self, tenant_id: str, booking_id: str, reason: str, by: str, forfeit_prepayment: bool) -> Booking:
         b = self.get_booking(tenant_id, booking_id)
         if b.status != "scheduled":
-            raise DataError("invalid_state", f"Booking {booking_id} is {b.status}, cannot cancel")
+            raise DataError("invalid_state", f"Бронювання {booking_id} має статус {b.status}, скасувати неможливо")
         b.status = "cancelled"
         if forfeit_prepayment:
             b.prepayment.status = "forfeited"
@@ -218,9 +234,9 @@ class MemoryDataSource(DataSource):
     def refund(self, tenant_id: str, booking_id: str, amount: int, reason: str, by: str) -> Booking:
         b = self.get_booking(tenant_id, booking_id)
         if b.prepayment.status != "held":
-            raise DataError("invalid_state", f"Prepayment is {b.prepayment.status}, cannot refund")
+            raise DataError("invalid_state", f"Передоплата має статус {b.prepayment.status}, повернути неможливо")
         if amount <= 0 or amount > b.prepayment.amount:
-            raise DataError("validation", f"Refund amount must be between 1 and {b.prepayment.amount}")
+            raise DataError("validation", f"Сума повернення має бути від 1 до {b.prepayment.amount} грн")
         b.prepayment.status = "refunded"
         self._log(b, "refunded", by, reason)
         return b
@@ -228,7 +244,7 @@ class MemoryDataSource(DataSource):
     def waive_no_show(self, tenant_id: str, booking_id: str, reason: str, by: str) -> Booking:
         b = self.get_booking(tenant_id, booking_id)
         if b.status != "no_show":
-            raise DataError("invalid_state", f"Booking {booking_id} is {b.status}, not no_show")
+            raise DataError("invalid_state", f"Бронювання {booking_id} має статус {b.status}, а не no_show")
         self._log(b, "no_show_fee_waived", by, reason)
         return b
 

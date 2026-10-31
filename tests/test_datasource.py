@@ -97,3 +97,31 @@ def test_goodwill_message_ticket(ds):
 def test_ira_has_used_exception_30_days_ago(ds):
     ex = ds.get_client("lumen", "ira").goodwill_exceptions
     assert len(ex) == 1 and (NOW - ex[0].date).days == 30
+
+
+def test_reschedule_to_past_is_validation(ds):
+    past = NOW.replace(hour=10, minute=0) - timedelta(days=1)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", past, "st-maria", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_reschedule_outside_working_hours_is_validation(ds):
+    night = NOW.replace(hour=3, minute=0) + timedelta(days=2)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", night, "st-maria", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_reschedule_to_staff_without_service_is_validation(ds):
+    ds._staff["lumen"]["st-olha"].service_ids = []
+    new = NOW.replace(hour=14, minute=0) + timedelta(days=2)
+    with pytest.raises(DataError) as e:
+        ds.reschedule("lumen", "b-olena-1", new, "st-olha", "x", "agent", False)
+    assert e.value.code == "validation"
+
+
+def test_data_error_messages_are_ukrainian(ds):
+    with pytest.raises(DataError) as e:
+        ds.get_booking("lumen", "nope")
+    assert "не знайдено" in e.value.message
