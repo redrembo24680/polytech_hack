@@ -15,9 +15,9 @@
 | OutgoingMessage | `id`, `client_id`, `channel` (chat/sms), `text`, `ts` |
 
 ## Сутності агента (`support-agent/agent/events.py`)
-- Event: `id` (наскрізний), `ts`, `session_id`, `tenant_id`, `type`, `payload`. Типи: `user_message`, `assistant_message`, `thinking`, `tool_call`, `tool_result`, `card`, `approval_created`, `approval_decided`, `error`.
+- Event: `id` (наскрізний), `ts`, `session_id`, `tenant_id`, `type`, `payload`. Типи: `user_message`, `assistant_message`, `thinking`, `tool_call`, `tool_result`, `card`, `approval_created`, `approval_decided`, `error`, `triage` (payload: `intent`, `urgency`, `tone`, `route`, `hint`, `model`, `emotion`, `intensity`, `normalized`, `register`, за потреби `fallback`).
 - Approval: `id` (`ap-N`), `session_id`, `tenant_id`, `tool`, `args`, `reason`, `status` (pending/approved/rejected), `decided_by`, `note`, `created_at`, `decided_at`.
-- Метрики (`metrics()`): `sessions`, `messages`, `tool_calls`, `auto_actions`, `approvals_pending/approved/rejected`, `escalations`, `money_saved_uah`.
+- Метрики (`metrics()`): `sessions`, `messages`, `tool_calls`, `auto_actions`, `approvals_pending/approved/rejected`, `escalations`, `money_saved_uah`, `intents` (лічильник за намірами), `emotions` (лічильник за емоціями).
 
 ## Tools
 Read: `get_client_profile`, `get_booking`, `find_slots`. Write (policy gated): `reschedule_booking`, `cancel_booking`, `refund_prepayment`, `apply_goodwill_exception`, `waive_no_show_fee`, `escalate_to_human`. UI: `show_card`. Поле `by` в історії: `agent` або `human:<ім'я>`.
