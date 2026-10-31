@@ -80,3 +80,4 @@ def test_build_assistant_payload():
     assert len(tools) == len(decls) and tools[0]["function"]["name"] == decls[0]["name"]
     assert tools[0]["server"]["url"] == "https://x.ngrok.app/voice/tools"
     assert p["transcriber"]["language"] == "uk"
+    assert p["voice"]["voiceId"].startswith("uk-UA") and p["serverMessages"] == ["tool-calls"]

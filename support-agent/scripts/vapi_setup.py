@@ -11,7 +11,7 @@ from pathlib import Path
 API = "https://api.vapi.ai"
 
 SYSTEM_PROMPT = """Ти голосовий асистент підтримки салону. Говори українською, коротко й ввічливо.
-- Привітайся. Клієнта вже ідентифіковано за номером, з якого він телефонує: не питай номер чи ідентифікатори.
+- Привітайся (перше повідомлення вже озвучено). Клієнта вже ідентифіковано за номером, з якого він телефонує: не питай номер чи ідентифікатори.
 - Для даних і дій користуйся інструментами; не вигадуй фактів. Спершу виклич get_client_profile.
 - Дотримуйся політики закладу; не обіцяй винятків, яких не підтвердив інструмент.
 - Якщо інструмент повернув pending_approval, скажи, що перевіриш це з адміністратором і зв'яжешся з клієнтом згодом.
@@ -36,6 +36,7 @@ def build_assistant_payload(declarations: list[dict], public_url: str, tenant_id
         "transcriber": {"provider": "deepgram", "model": "nova-3", "language": "uk"},
         "voice": {"provider": "azure", "voiceId": "uk-UA-PolinaNeural"},
         "server": {"url": server_url},
+        "serverMessages": ["tool-calls"],
         "metadata": {"tenant_id": tenant_id},
     }
 
