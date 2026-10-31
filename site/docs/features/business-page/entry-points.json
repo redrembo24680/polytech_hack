@@ -1,0 +1,9 @@
+{
+  "page /b/[tenant]": "app/web/app/b/[tenant]/page.tsx:BusinessPage",
+  "page /b/[tenant]/book": "app/web/app/b/[tenant]/book/page.tsx:BookPage",
+  "component BookingFlow": "app/web/components/booking/BookingFlow.tsx:BookingFlow",
+  "component BookingConfirmation": "app/web/components/booking/BookingConfirmation.tsx:BookingConfirmation",
+  "function policyToText": "app/web/lib/policy-text.ts:policyToText",
+  "function dayBoundary": "app/web/lib/format.ts:dayBoundary",
+  "function nextDays": "app/web/lib/format.ts:nextDays"
+}
