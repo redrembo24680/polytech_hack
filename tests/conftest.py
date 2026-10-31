@@ -81,3 +81,19 @@ def ctx_denta_petro():
 @pytest.fixture
 def ctx_denta_anna():
     yield from _make_ctx("denta", "anna")
+
+
+@pytest.fixture
+def sess_factory():
+    from agent.agent import Session
+    from agent.events import ApprovalStore, EventLog
+    from agent.tools import default_registry
+
+    def make(tenant_id: str, client_id: str, llm):
+        return Session(
+            id="s-test", tenant_id=tenant_id, client_id=client_id, channel="chat",
+            ds=_fresh_ds(), events=EventLog(), approvals=ApprovalStore(),
+            llm=llm, registry=default_registry(), now_fn=lambda: NOW,
+        )
+
+    return make
