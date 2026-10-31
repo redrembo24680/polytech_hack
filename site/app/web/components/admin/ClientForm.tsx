@@ -33,10 +33,13 @@ function Inner({ tenant, client, onClose, onSaved }: { tenant: string; client?: 
     setBusy(true);
     setErr(null);
     try {
-      const body = { name: name.trim(), phone, notes };
       const saved = client
-        ? await api.patch<Client>(`/api/tenants/${tenant}/clients/${client.id}`, body)
-        : await api.post<Client>(`/api/tenants/${tenant}/clients`, body);
+        ? await api.patch<Client>(`/api/tenants/${tenant}/clients/${client.id}`, {
+            ...(name.trim() !== client.name && { name: name.trim() }),
+            ...(phone.replace(/\D/g, "") !== client.phone && { phone }),
+            ...(notes !== client.notes && { notes }),
+          })
+        : await api.post<Client>(`/api/tenants/${tenant}/clients`, { name: name.trim(), phone, notes });
       toast.success(client ? "Клієнта оновлено" : "Клієнта створено");
       onSaved(saved);
       onClose();

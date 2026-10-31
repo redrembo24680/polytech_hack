@@ -27,6 +27,7 @@ function Inner({ tenant, staff, services, onClose, onSaved }: {
   const [name, setName] = useState(staff?.name ?? "");
   const [ids, setIds] = useState<string[]>(staff?.service_ids ?? []);
   const [days, setDays] = useState<DayState[]>(() => rowsToDays(staff?.schedule ?? []));
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -41,8 +42,18 @@ function Inner({ tenant, staff, services, onClose, onSaved }: {
     try {
       const base = `/api/tenants/${tenant}/staff`;
       const body = { name: name.trim(), service_ids: ids };
-      const saved = staff ? await api.patch<Staff>(`${base}/${staff.id}`, body) : await api.post<Staff>(base, body);
-      await api.put(`${base}/${saved.id}/schedule`, daysToRows(days));
+      const existingId = staff?.id ?? createdId;
+      let id: string;
+      if (existingId) {
+        await api.patch<Staff>(`${base}/${existingId}`, body);
+        id = existingId;
+      } else {
+        const created = await api.post<Staff>(base, body);
+        id = created.id;
+        setCreatedId(id);
+        onSaved();
+      }
+      await api.put(`${base}/${id}/schedule`, daysToRows(days));
       toast.success(staff ? "Майстра оновлено" : "Майстра створено");
       onSaved();
       onClose();
