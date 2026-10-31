@@ -131,6 +131,7 @@ def conversation_out(c) -> dict:
     return {
         "id": c.id, "tenant_id": c.tenant_id, "client_id": c.client_id,
         "status": c.status, "created_at": iso(c.created_at, c.tenant.timezone),
+        "visitor_name": c.visitor_name, "visitor_phone": c.visitor_phone,
     }
 
 

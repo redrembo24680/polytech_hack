@@ -61,6 +61,14 @@ def test_create_with_known_phone_links_client(client):
 def test_create_unknown_phone_no_client(client):
     c = new_conv(client, client_phone="380000000000", client_name="Хтось")
     assert c["client_id"] is None
+    assert c["visitor_name"] == "Хтось" and c["visitor_phone"] == "380000000000"
+
+
+def test_unknown_visitor_name_in_inbox(client):
+    c = new_conv(client, client_phone="0 50 111 22 33", client_name="Гість")
+    assert c["client_id"] is None and c["visitor_phone"] == "380501112233"
+    row = [x for x in client.get(BASE).json() if x["id"] == c["id"]][0]
+    assert row["client_name"] == "Гість"
 
 
 def test_no_agent_url_gives_stub(client, monkeypatch):

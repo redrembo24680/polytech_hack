@@ -152,6 +152,8 @@ class Conversation(Base):
     )
     status: Mapped[str] = mapped_column(String, default="open")
     created_at: Mapped[datetime] = mapped_column(TS)
+    visitor_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    visitor_phone: Mapped[str | None] = mapped_column(String, nullable=True)
     tenant: Mapped[Tenant] = relationship()
 
 

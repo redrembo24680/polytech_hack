@@ -53,7 +53,9 @@ def create_conversation(tenant_id: str, body: ConversationIn,
         client_id = session.scalar(select(Client.id).where(
             Client.tenant_id == tenant_id, Client.phone == phone))
     conv = Conversation(id=new_id("conv"), tenant_id=tenant_id, client_id=client_id,
-                        status="open", created_at=clock.now())
+                        status="open", created_at=clock.now(),
+                        visitor_name=(body.client_name or "").strip() or None,
+                        visitor_phone=phone or None)
     session.add(conv)
     session.commit()
     return conversation_out(conv)
@@ -71,7 +73,7 @@ def list_conversations(tenant_id: str, status: Literal["open", "closed"] | None 
         last = session.scalars(select(ChatMessage).where(ChatMessage.conversation_id == c.id)
                                .order_by(ChatMessage.ts.desc(), ChatMessage.id.desc())
                                .limit(1)).first()
-        name = session.get(Client, c.client_id).name if c.client_id else None
+        name = session.get(Client, c.client_id).name if c.client_id else c.visitor_name
         d = conversation_out(c)
         d["client_name"] = name
         d["last_message"] = (
