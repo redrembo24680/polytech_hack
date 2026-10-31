@@ -24,7 +24,7 @@ def _policy_ctx(c: SessionCtx, booking_id: str | None, amount: int | None = None
     return PolicyContext(
         policy=c.ds.get_tenant(c.tenant_id).policy,
         client=c.ds.get_client(c.tenant_id, c.client_id),
-        booking=c.ds.get_booking(c.tenant_id, booking_id) if booking_id else None,
+        booking=_own_booking(c, booking_id) if booking_id else None,
         now=c.now,
         amount=amount,
     )
@@ -58,30 +58,70 @@ class ToolRegistry:
 
         decision: Decision | None = None
         label = {"read": "read", "ui": "ui"}.get(spec.kind, "error")
+        called = False
+        detail = None
         try:
+            _validate_args(spec, args)
             if spec.kind == "write":
                 # policy decision is computed BEFORE anything is executed or logged as done
                 decision = _decide_for(spec, c, args)
                 label = _decision_name(decision)
             emit("tool_call", {"name": name, "args": args, "decision": label})
+            called = True
             result = _run(spec, c, args, decision)
         except DataError as e:
             result = {"error": e.code, "message": e.message}
-        except TypeError as e:
+        except _ArgError as e:
             result = {"error": "validation", "message": str(e)}
-        except ValueError as e:
-            result = {"error": "validation", "message": str(e)}
-        if label == "error":  # failed before the call event was emitted
+        except Exception as e:  # never let model input or a misconfiguration crash the loop
+            result = {"error": "internal", "message": "Внутрішня помилка інструмента."}
+            detail = f"{type(e).__name__}: {e}"
+        if not called:  # failed before the call event was emitted
             emit("tool_call", {"name": name, "args": args, "decision": label})
-        emit("tool_result", {"name": name, "result": result})
+        payload = {"name": name, "result": result}
+        if detail:
+            payload["detail"] = detail
+        emit("tool_result", payload)
         if spec.kind == "ui" and result.get("status") == "shown":
             emit("card", args["card"])
         return result
 
 
+class _ArgError(Exception):
+    pass
+
+
+_TYPES = {"string": str, "integer": int, "object": dict}
+_DATE_PARAMS = {"start": datetime.fromisoformat, "from_date": date.fromisoformat, "to_date": date.fromisoformat}
+
+
+def _validate_args(spec: ToolSpec, args: dict) -> None:
+    props = spec.parameters["properties"]
+    unknown = sorted(set(args) - set(props))
+    if unknown:
+        raise _ArgError(f"Невідомі аргументи: {unknown}")
+    missing = [k for k in spec.parameters.get("required", []) if k not in args]
+    if missing:
+        raise _ArgError(f"Відсутні обов'язкові аргументи: {missing}")
+    for key, value in args.items():
+        expected = _TYPES[props[key]["type"]]
+        if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
+            raise _ArgError(f"Аргумент {key} має бути типу {props[key]['type']}")
+        if key in _DATE_PARAMS:
+            try:
+                _DATE_PARAMS[key](value)
+            except ValueError:
+                raise _ArgError(f"Аргумент {key} не є коректною датою ISO") from None
+
+
+def _own_booking(c: SessionCtx, booking_id: str):
+    b = c.ds.get_booking(c.tenant_id, booking_id)
+    if b.client_id != c.client_id:
+        raise DataError("not_found", "Бронювання не знайдено.")
+    return b
+
+
 def _decide_for(spec: ToolSpec, c: SessionCtx, args: dict) -> Decision:
-    if set(args) - {"booking_id", "start", "staff_id", "reason", "amount", "summary", "priority"}:
-        raise TypeError(f"Unexpected arguments: {sorted(args)}")
     pc = _policy_ctx(c, args.get("booking_id"), args.get("amount"))
     if spec.action == "refund" and pc.booking is not None and isinstance(pc.amount, int):
         # an impossible amount is a data error, not something worth an admin's approval
@@ -94,10 +134,8 @@ def _run(spec: ToolSpec, c: SessionCtx, args: dict, decision: Decision | None) -
     if decision is None:
         return spec.fn(**args)
     if isinstance(decision, Forbidden):
-        _check_args(spec, args)
         return {"status": "forbidden", "reason": decision.reason}
     if isinstance(decision, NeedsApproval):
-        _check_args(spec, args)
         ap = c.approvals.create(c.session_id, c.tenant_id, spec.name, dict(args), decision.reason)
         c.events.emit(c.session_id, c.tenant_id, "approval_created", ap.model_dump(mode="json"))
         return {
@@ -106,12 +144,6 @@ def _run(spec: ToolSpec, c: SessionCtx, args: dict, decision: Decision | None) -
         }
     out = spec.fn(**args)
     return {"status": "done", "decision_reason": decision.reason, **out}
-
-
-def _check_args(spec: ToolSpec, args: dict) -> None:
-    missing = [k for k in spec.parameters.get("required", []) if k not in args]
-    if missing:
-        raise TypeError(f"Missing arguments: {missing}")
 
 
 def _booking_json(b) -> dict:
@@ -129,7 +161,7 @@ def get_client_profile() -> dict:
 
 def get_booking(booking_id: str) -> dict:
     c = get_ctx()
-    return _booking_json(c.ds.get_booking(c.tenant_id, booking_id))
+    return _booking_json(_own_booking(c, booking_id))
 
 
 def find_slots(service_id: str, from_date: str, to_date: str, staff_id: str | None = None) -> dict:
@@ -144,13 +176,13 @@ def find_slots(service_id: str, from_date: str, to_date: str, staff_id: str | No
 # ---------- write tools (called only after Allow) ----------
 
 def _forfeit(c: SessionCtx, booking_id: str) -> bool:
-    b = c.ds.get_booking(c.tenant_id, booking_id)
+    b = _own_booking(c, booking_id)
     policy = c.ds.get_tenant(c.tenant_id).policy
     return is_late_change(policy, b, c.now) and booking_id not in c.goodwill_applied
 
 
 def _saved_by_goodwill(c: SessionCtx, booking_id: str) -> dict:
-    b = c.ds.get_booking(c.tenant_id, booking_id)
+    b = _own_booking(c, booking_id)
     policy = c.ds.get_tenant(c.tenant_id).policy
     if booking_id in c.goodwill_applied and is_late_change(policy, b, c.now) and b.prepayment.status == "held":
         return {"saved_uah": b.prepayment.amount}
@@ -181,7 +213,7 @@ def refund_prepayment(booking_id: str, amount: int, reason: str) -> dict:
 
 def apply_goodwill_exception(booking_id: str, reason: str) -> dict:
     c = get_ctx()
-    b = c.ds.get_booking(c.tenant_id, booking_id)
+    b = _own_booking(c, booking_id)
     c.ds.add_goodwill(c.tenant_id, c.client_id, booking_id, reason, "agent")
     c.goodwill_applied.add(booking_id)
     return {"booking": _booking_json(b)}

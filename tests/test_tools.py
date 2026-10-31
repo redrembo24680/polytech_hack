@@ -125,3 +125,40 @@ def test_get_ctx_without_session_raises():
 
 def test_ctx_is_dataclass_with_goodwill_default(ctx_lumen_olena):
     assert isinstance(ctx_lumen_olena, SessionCtx) and ctx_lumen_olena.goodwill_applied == set()
+
+
+def test_cross_client_booking_is_not_found(reg, ctx_lumen_olena):
+    assert reg.call("get_booking", {"booking_id": "b-max-1"})["error"] == "not_found"
+    assert reg.call("cancel_booking", {"booking_id": "b-max-1", "reason": "x"})["error"] == "not_found"
+    assert ctx_lumen_olena.ds.get_booking("lumen", "b-max-1").status == "scheduled"
+
+
+def test_args_validated_per_tool(reg, ctx_lumen_olena):
+    r = reg.call("cancel_booking", {"booking_id": "b-olena-1", "reason": "x", "start": iso(LATE)})
+    assert r["error"] == "validation"
+    r = reg.call("refund_prepayment", {"booking_id": "b-olena-1", "amount": "abc", "reason": "x"})
+    assert r["error"] == "validation" and ctx_lumen_olena.approvals.pending("lumen") == []
+    r = reg.call("refund_prepayment", {"booking_id": "b-olena-1", "amount": True, "reason": "x"})
+    assert r["error"] == "validation"
+    r = reg.call("reschedule_booking", {"booking_id": "b-olena-1", "start": "garbage", "reason": "x"})
+    assert r["error"] == "validation"
+
+
+def test_unexpected_exception_becomes_internal(reg, ctx_lumen_olena):
+    from agent.tools import ToolSpec
+
+    def boom() -> dict:
+        raise RuntimeError("kaboom")
+
+    reg.register(ToolSpec("boom", "t", {"type": "object", "properties": {}, "required": []}, boom))
+    r = reg.call("boom", {})
+    assert r["error"] == "internal"
+    last = ctx_lumen_olena.events.since("s1")[-1]
+    assert last.type == "tool_result" and "kaboom" in last.payload["detail"]
+
+
+def test_policy_misconfiguration_is_internal(reg, ctx_lumen_olena):
+    tenant = ctx_lumen_olena.ds.get_tenant("lumen")
+    perms = tenant.policy.agent_permissions.model_copy(update={"cancel": "bogus"})
+    tenant.policy.agent_permissions = perms
+    assert reg.call("cancel_booking", {"booking_id": "b-olena-1", "reason": "x"})["error"] == "internal"
