@@ -89,8 +89,8 @@ history: [ {ts, event, by, note} ]        # для таймлайну в кар�
 
 **MCP-сервер** — один для всіх тенантів, `tenant_id` передається аргументом кожного tool.
 Транспорт: streamable HTTP на `APP_MCP_URL` (напр. `http://localhost:8001/mcp`) або stdio.
-Імена tools і їхні аргументи = рядки таблиць нижче (`get_tenant`, `get_client`,
-`find_client_by_phone`, `get_booking`, `find_slots`, `reschedule_booking`, `cancel_booking`,
+Імена tools і їхні аргументи = рядки таблиць нижче (`get_tenant`, `list_clients`, `get_client`,
+`list_client_bookings` (= bookings із `get_client`, окремо для зручності), `find_client_by_phone`, `get_booking`, `find_slots`, `reschedule_booking`, `cancel_booking`,
 `refund_prepayment`, `waive_no_show_fee`, `add_goodwill`, `send_message`, `create_ticket`).
 Результат tool — той самий JSON, що й відповідь HTTP; помилка — `{"error": код, "message": ...}`.
 Опціонально (stretch): `get_no_show_risk(tenant_id, client_id)` → `{score: 0..1, factors: [..]}`
@@ -105,6 +105,7 @@ history: [ {ts, event, by, note} ]        # для таймлайну в кар�
 | Метод | Шлях | Відповідь |
 |---|---|---|
 | GET | `/` | Tenant із policy |
+| GET | `/clients` | `[Client]` усі клієнти тенанта (для селектора в UI агента) |
 | GET | `/clients/{client_id}` | Client + `bookings: [Booking]` (усі, нові зверху) |
 | GET | `/clients?phone=...` | `[Client]` (пошук для голосу/ідентифікації) |
 | GET | `/bookings/{booking_id}` | Booking + вкладені `client`, `staff`, `service` |
@@ -123,7 +124,8 @@ history: [ {ts, event, by, note} ]        # для таймлайну в кар�
 
 Поле `by` — хто зробив дію: `"agent"`, `"human:<ім'я>"`. Йде в history для таймлайну.
 
-Відповідність MCP ↔ HTTP: `get_tenant`=GET `/`, `get_client`=GET `/clients/{id}`,
+Відповідність MCP ↔ HTTP: `get_tenant`=GET `/`, `list_clients`=GET `/clients`, `get_client`=GET `/clients/{id}`,
+`list_client_bookings`=поле `bookings` з GET `/clients/{id}`,
 `find_client_by_phone`=GET `/clients?phone=`, `get_booking`=GET `/bookings/{id}`,
 `find_slots`=GET `/slots`, `reschedule_booking`=POST `.../reschedule`, `cancel_booking`=POST
 `.../cancel`, `refund_prepayment`=POST `.../refund`, `waive_no_show_fee`=POST
