@@ -34,8 +34,9 @@ def create_app(init_db: bool = True) -> FastAPI:
     )
     register_error_handlers(app)
 
-    from booking.routers import admin
+    from booking.routers import admin, tenants
     app.include_router(admin.router)
+    app.include_router(tenants.router)
 
     @app.get("/api/health")
     def health():

@@ -48,7 +48,8 @@ def tenant_out(t) -> dict:
     return {
         "id": t.id, "name": t.name, "kind": t.kind, "timezone": t.timezone,
         "description": t.description, "address": t.address, "phone": t.phone,
-        "instagram": t.instagram, "policy": t.policy,
+        "instagram": t.instagram,
+        "policy": Policy.model_validate(t.policy).model_dump(),
     }
 
 
@@ -56,6 +57,11 @@ def staff_out(s) -> dict:
     return {
         "id": s.id, "tenant_id": s.tenant_id, "name": s.name,
         "service_ids": [sv.id for sv in s.services],
+        "schedule": [
+            {"weekday": r.weekday, "start": r.start_time.strftime("%H:%M"),
+             "end": r.end_time.strftime("%H:%M")}
+            for r in s.schedule
+        ],
     }
 
 
