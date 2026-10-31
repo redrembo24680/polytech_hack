@@ -13,9 +13,9 @@ function time(ts: string): string {
   return d.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
 }
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+export function MessageBubble({ message, clientLabel }: { message: ChatMessage; clientLabel?: string }) {
   const mine = message.role === "client";
-  const label = ROLE_LABEL[message.role];
+  const label = mine ? (clientLabel ?? null) : ROLE_LABEL[message.role];
   return (
     <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
       <div className={cn("flex max-w-[85%] flex-col gap-1", mine ? "items-end" : "items-start")}>

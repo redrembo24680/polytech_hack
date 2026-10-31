@@ -37,6 +37,7 @@ export const FEE_LABEL: Record<string, string> = {
 
 export const EVENT_LABEL: Record<string, string> = {
   created: "Створено",
+  scheduled: "Заплановано",
   prepayment_held: "Передоплату утримано",
   rescheduled: "Перенесено",
   cancelled: "Скасовано",

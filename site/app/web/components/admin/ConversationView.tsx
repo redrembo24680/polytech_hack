@@ -97,7 +97,7 @@ export function ConversationView({ tenant, conversationId }: { tenant: string; c
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && <p className="py-8 text-center text-sm text-slate-400">Повідомлень ще немає</p>}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} clientLabel={conv ? convName(conv) : undefined} />
         ))}
         <div ref={bottomRef} />
       </div>
