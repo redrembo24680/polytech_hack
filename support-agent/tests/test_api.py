@@ -189,11 +189,11 @@ def test_create_session_without_llm_key_is_503(monkeypatch):
 def test_injected_orchestrator_answers_without_worker():
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-    from agent.orchestrator import Orchestrator
+    from agent.orchestrator import Answerer, Orchestrator
 
     orch = Orchestrator(FakeListChatModel(responses=[
-        '{"intent":"question","urgency":"low","tone":"calm","route":"answer","hint":"","reply":"Працюємо до 20:00."}']),
-        "gemma-test")
+        '{"intent":"question","urgency":"low","tone":"calm","route":"answer","hint":""}']),
+        "claude-test", Answerer(FakeListChatModel(responses=["Працюємо до 20:00."]), "gemma-test"))
     ds = MemoryDataSource.from_file(SEED_PATH, NOW, now_fn=lambda: NOW)
     c = TestClient(create_app(ds=ds, llm=FakeClient([]), now_fn=lambda: NOW, orchestrator=orch))
     sid = new_session(c)

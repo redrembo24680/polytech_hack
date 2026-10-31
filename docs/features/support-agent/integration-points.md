@@ -34,3 +34,6 @@
 ## Gemma 4 / Ollama / Gemini API (оркестратор)
 `ORCHESTRATOR_PROVIDER=gemini`: `langchain-google-genai` `ChatGoogleGenerativeAI` (`GEMINI_API_KEY`, модель `gemma-4-31b-it`, безкоштовно); без ключа оркестратор вимкнено. За замовчуванням (`ollama`):
 `langchain-ollama` `ChatOllama` -> `ORCHESTRATOR_BASE_URL` (за замовчуванням `http://localhost:11434`), модель `ORCHESTRATOR_MODEL`. Окремо від провайдера воркера (`AGENT_PROVIDER`). Оркестратор не має доступу до tools і даних апки, лише до `rules_text` і короткого опису клієнта.
+
+## Claude Sonnet (оркестратор) і Gemma 4 (відповідач)
+Оркестратор за замовчуванням: `langchain-anthropic` `ChatAnthropic` (`ORCHESTRATOR_MODEL=claude-sonnet-5-5`, `ANTHROPIC_API_KEY`, `temperature=0`, `max_tokens=512`); альтернативи `ORCHESTRATOR_PROVIDER=ollama|gemini` (описано вище). Відповідач `Answerer`: `ANSWERER=on|off`, `ANSWERER_PROVIDER=ollama` (за замовчуванням, `ANSWERER_MODEL=gemma4:12b`, `ANSWERER_BASE_URL=http://localhost:11434`) або `gemini` (`gemma-4-31b-it`, `GEMINI_API_KEY`; без ключа відповідача немає). Створення клієнтів не робить мережевих викликів.

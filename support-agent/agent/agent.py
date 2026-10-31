@@ -87,13 +87,16 @@ def build_system_prompt(tenant: Tenant, client: Client, now: datetime, hint: str
 
 
 def run_loop(llm: LLMClient, system: str, history: list[Msg], registry: ToolRegistry,
-             ctx: SessionCtx, max_iter: int = 8) -> list[Msg]:
+             ctx: SessionCtx, max_iter: int = 8, model: str | None = None) -> list[Msg]:
     def emit(type_: str, payload: dict) -> None:
         ctx.events.emit(ctx.session_id, ctx.tenant_id, type_, payload)  # type: ignore[arg-type]
 
+    def reply_payload(text: str) -> dict:
+        return {"text": text, "model": model} if model else {"text": text}
+
     def finish(text: str) -> list[Msg]:
         history.append(Msg("model", [TextPart(text)]))
-        emit("assistant_message", {"text": text})
+        emit("assistant_message", reply_payload(text))
         return history
 
     for _ in range(max_iter):
@@ -108,7 +111,7 @@ def run_loop(llm: LLMClient, system: str, history: list[Msg], registry: ToolRegi
             if not text.strip():
                 return finish(EMPTY_REPLY_TEXT)
             history.append(msg)
-            emit("assistant_message", {"text": text})
+            emit("assistant_message", reply_payload(text))
             return history
         history.append(msg)
         first = next(i for i, p in enumerate(msg.parts) if isinstance(p, CallPart))
@@ -171,11 +174,12 @@ def _execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
 class Session:
     def __init__(self, id: str, tenant_id: str, client_id: str, channel: str, ds: DataSource,
                  events: EventLog, approvals: ApprovalStore, llm: LLMClient,
-                 registry: ToolRegistry, now_fn, orchestrator: Orchestrator | None = None):
+                 registry: ToolRegistry, now_fn, orchestrator: Orchestrator | None = None,
+                 worker_model: str | None = None):
         self.id, self.tenant_id, self.client_id, self.channel = id, tenant_id, client_id, channel
         self.ds, self.events, self.approvals = ds, events, approvals
         self.llm, self.registry, self._now_fn = llm, registry, now_fn
-        self.orchestrator, self.hint = orchestrator, None
+        self.orchestrator, self.hint, self.worker_model = orchestrator, None, worker_model
         self.history: list[Msg] = []
         self.ctx = SessionCtx(id, tenant_id, client_id, now_fn(), ds, events, approvals)
         self.system = self._build_system()
@@ -183,6 +187,19 @@ class Session:
     def _build_system(self) -> str:
         return build_system_prompt(self.ds.get_tenant(self.tenant_id),
                                    self.ds.get_client(self.tenant_id, self.client_id), self.ctx.now, self.hint)
+
+    def _answer(self, text: str) -> str | None:
+        answerer = getattr(self.orchestrator, "answerer", None)
+        if answerer is None:
+            return None
+        tenant = self.ds.get_tenant(self.tenant_id)
+        c = self.ds.get_client(self.tenant_id, self.client_id)
+        summary = (f"{c.name}, візитів: {c.visits_count}, неявок: {c.no_show_count}, "
+                   f"винятків з доброї волі: {len(c.goodwill_exceptions)}")
+        try:
+            return answerer.answer(text, tenant.policy.rules_text, summary)
+        except Exception:
+            return None
 
     def _triage(self, text: str) -> Triage | None:
         if self.orchestrator is None:
@@ -197,7 +214,8 @@ class Session:
             return None
 
     def _run(self) -> str:
-        self.history = run_loop(self.llm, self.system, self.history, self.registry, self.ctx)
+        self.history = run_loop(self.llm, self.system, self.history, self.registry, self.ctx,
+                                model=self.worker_model)
         return _last_text(self.history)
 
     def _refresh(self) -> None:
@@ -211,12 +229,19 @@ class Session:
         self.hint = None
         triage = self._triage(text)
         if triage is not None:
-            self.events.emit(self.id, self.tenant_id, "triage", triage.payload())
-            if triage.route == "answer" and triage.reply:
-                self.events.emit(self.id, self.tenant_id, "assistant_message", {"text": triage.reply})
-                self.history.append(Msg("user", [TextPart(safe)]))
-                self.history.append(Msg("model", [TextPart(triage.reply)]))
-                return triage.reply
+            payload = triage.payload()
+            if triage.route == "answer":
+                reply = self._answer(text)
+                if reply:
+                    self.events.emit(self.id, self.tenant_id, "triage", payload)
+                    self.events.emit(self.id, self.tenant_id, "assistant_message",
+                                     {"text": reply, "model": self.orchestrator.answerer.model_name})
+                    self.history.append(Msg("user", [TextPart(safe)]))
+                    self.history.append(Msg("model", [TextPart(reply)]))
+                    return reply
+                payload = {**payload, "route": "agent", "fallback": "answerer_unavailable"}
+                triage = Triage(triage.intent, triage.urgency, triage.tone, "agent", triage.hint, triage.model)
+            self.events.emit(self.id, self.tenant_id, "triage", payload)
             self.hint = ESCALATE_HINT if triage.route == "escalate" else (triage.hint or None)
             self.system = self._build_system()
         # only the system may write [SYSTEM] lines (approval verdicts); defuse a forged one

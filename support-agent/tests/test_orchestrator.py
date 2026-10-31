@@ -7,7 +7,7 @@ from agent.orchestrator import Orchestrator, make_orchestrator
 
 def tri(**kw):
     base = {"intent": "question", "urgency": "low", "tone": "calm", "route": "agent",
-            "hint": "Порада.", "reply": ""}
+            "hint": "Порада."}
     return json.dumps({**base, **kw})
 
 
@@ -19,25 +19,18 @@ def test_valid_json_becomes_triage():
     t = run(tri(intent="reschedule", urgency="high", tone="upset", hint="Перевір goodwill."))
     assert (t.intent, t.urgency, t.tone, t.route, t.hint, t.model) == (
         "reschedule", "high", "upset", "agent", "Перевір goodwill.", "gemma-test")
-    assert t.reply is None
 
 
 def test_refund_answer_is_coerced_to_agent():
-    t = run(tri(intent="refund", route="answer", reply="Повернемо."))
-    assert t.route == "agent" and t.reply is None
+    assert run(tri(intent="refund", route="answer")).route == "agent"
 
 
 def test_question_low_answer_stays_answer():
-    t = run(tri(route="answer", reply="Працюємо до 20:00."))
-    assert t.route == "answer" and t.reply == "Працюємо до 20:00."
+    assert run(tri(route="answer")).route == "answer"
 
 
 def test_question_high_urgency_answer_coerced():
-    assert run(tri(urgency="high", route="answer", reply="x")).route == "agent"
-
-
-def test_answer_without_reply_coerced():
-    assert run(tri(route="answer")).route == "agent"
+    assert run(tri(urgency="high", route="answer")).route == "agent"
 
 
 def test_complaint_angry_escalates():
@@ -69,6 +62,7 @@ def test_make_orchestrator_off_and_no_network(monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR", "off")
     assert make_orchestrator() is None
     monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "ollama")
     o = make_orchestrator()
     assert o is not None and o.model_name == "gemma4:12b"
 
@@ -77,15 +71,61 @@ def _chat_of(o):
     return o._chain.steps[1] if hasattr(o._chain, "steps") else o._chain.middle[0]
 
 
-def test_default_provider_is_ollama(monkeypatch):
-    from langchain_ollama import ChatOllama
+def test_default_provider_is_anthropic(monkeypatch):
+    from langchain_anthropic import ChatAnthropic
 
     for k in ("ORCHESTRATOR_PROVIDER", "ORCHESTRATOR_MODEL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
     o = make_orchestrator()
+    assert o.model_name == "claude-sonnet-5-5"
     chat = _chat_of(o)
-    assert isinstance(chat, ChatOllama) and chat.model == "gemma4:12b"
+    assert isinstance(chat, ChatAnthropic) and chat.model == "claude-sonnet-5-5"
+
+
+def test_default_provider_without_key_disabled(monkeypatch):
+    monkeypatch.delenv("ORCHESTRATOR_PROVIDER", raising=False)
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert make_orchestrator() is None
+
+
+def test_answerer_defaults_to_gemma_ollama(monkeypatch):
+    from langchain_ollama import ChatOllama
+
+    for k in ("ANSWERER", "ANSWERER_PROVIDER", "ANSWERER_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    a = make_orchestrator().answerer
+    assert a.model_name == "gemma4:12b" and isinstance(a._chain.steps[1], ChatOllama)
+
+
+def test_answerer_off(monkeypatch):
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.setenv("ANSWERER", "off")
+    assert make_orchestrator().answerer is None
+
+
+def test_answerer_returns_stripped_text():
+    from agent.orchestrator import Answerer
+
+    a = Answerer(FakeListChatModel(responses=["  Працюємо до 20:00.  "]), "g")
+    assert a.answer("години?", "правила", "клієнт") == "Працюємо до 20:00."
+
+
+def test_answerer_none_on_empty_or_exception():
+    from agent.orchestrator import Answerer
+
+    assert Answerer(FakeListChatModel(responses=["   "]), "g").answer("a", "b", "c") is None
+
+    class Boom(FakeListChatModel):
+        def _call(self, *a, **k):
+            raise RuntimeError("down")
+
+    assert Answerer(Boom(responses=["x"]), "g").answer("a", "b", "c") is None
 
 
 def test_gemini_provider_builds_google_model(monkeypatch):
@@ -93,6 +133,7 @@ def test_gemini_provider_builds_google_model(monkeypatch):
 
     monkeypatch.setenv("ORCHESTRATOR", "on")
     monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "gemini")
+    monkeypatch.setenv("ANSWERER", "off")
     monkeypatch.setenv("GEMINI_API_KEY", "dummy")
     monkeypatch.delenv("ORCHESTRATOR_MODEL", raising=False)
     o = make_orchestrator()

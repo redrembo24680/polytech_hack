@@ -97,7 +97,8 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
             st.counter += 1
             sid = f"s-{st.counter}"
         st.sessions[sid] = Session(sid, body.tenant_id, body.client_id, body.channel, ds,
-                                   st.events, st.approvals, st.llm, default_registry(), now_fn, st.orchestrator)
+                                   st.events, st.approvals, st.llm, default_registry(), now_fn, st.orchestrator,
+                                   os.environ.get("AGENT_MODEL") or getattr(st.llm, "model", None))
         st.locks[sid] = threading.Lock()
         return {"session_id": sid}
 

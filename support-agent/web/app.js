@@ -76,8 +76,18 @@ function setBusy(b) {
   document.querySelectorAll(".card .opts button").forEach((x) => { x.disabled = off; });
 }
 
-function addChat(role, text) {
+function modelLabel(model) {
+  if (!model) return "";
+  return /gemma/i.test(model) ? "Gemma 4" : /claude/i.test(model) ? "Claude" : model;
+}
+
+function addChat(role, text, model) {
   const m = el("div", "msg " + role, text);
+  if (role === "assistant" && model) {
+    const tag = el("div", "model-tag", modelLabel(model));
+    tag.style.cssText = "font-size:11px;opacity:.6;margin-top:4px";
+    m.appendChild(tag);
+  }
   $("chat").appendChild(m);
   scrollDown($("chat"));
 }
@@ -176,7 +186,7 @@ function renderFeed(ev) {
       break;
     }
     case "triage": {
-      row.appendChild(el("span", "", "🧭 Оркестратор (Gemma 4): " + [p.intent, p.urgency, p.tone].join(" · ") + " → " + p.route));
+      row.appendChild(el("span", "", `🧭 Оркестратор (${p.model || "?"}): ` + [p.intent, p.urgency, p.tone].join(" · ") + " → " + p.route));
       const color = { urgent: "#d33", high: "#d90" }[p.urgency];
       if (color) { row.style.color = color; row.style.fontWeight = "600"; }
       if (p.hint) row.title = p.hint;
@@ -199,7 +209,7 @@ function renderFeed(ev) {
 function handleEvent(ev) {
   const p = ev.payload || {};
   if (ev.type === "user_message") addChat("user", p.text || "");
-  else if (ev.type === "assistant_message") addChat("assistant", p.text || "");
+  else if (ev.type === "assistant_message") addChat("assistant", p.text || "", p.model);
   else if (ev.type === "card") renderCard(p);
   renderFeed(ev);
 }

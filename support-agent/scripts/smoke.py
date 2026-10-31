@@ -1,6 +1,7 @@
 """Live smoke: прогін демо-сценарію через реальний (або fake) LLM-провайдер без HTTP-шару."""
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -40,7 +41,7 @@ def describe(event) -> str:
     p = event.payload
     t = event.type
     if t in ("user_message", "assistant_message", "thinking"):
-        detail = short(p.get("text", ""), 300)
+        detail = short(p.get("text", ""), 300) + (f" [model={p['model']}]" if p.get("model") else "")
     elif t == "tool_call":
         detail = f"{p.get('name')} [{p.get('decision')}] {short(p.get('args'))}"
     elif t == "tool_result":
@@ -50,7 +51,7 @@ def describe(event) -> str:
     elif t in ("approval_created", "approval_decided"):
         detail = f"{p.get('id')} {p.get('tool')} status={p.get('status')} {short(p.get('args'))}"
     elif t == "triage":
-        detail = f"{p.get('intent')}/{p.get('urgency')}/{p.get('tone')} -> {p.get('route')} {short(p.get('hint', ''))}"
+        detail = f"{p.get('intent')}/{p.get('urgency')}/{p.get('tone')} -> {p.get('route')} model={p.get('model')} {short(p.get('hint', ''))}"
     else:
         detail = short(p)
     return f"#{event.id:<3} {t:<17} {detail}"
@@ -71,6 +72,7 @@ def choose_first_slot(session, events, reply: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scenario", choices=sorted(SCENARIOS), default="A")
+    ap.add_argument("--text", help="власне повідомлення клієнта замість шаблону сценарію")
     args = ap.parse_args()
     tenant_id, client_id, booking_id, template = SCENARIOS[args.scenario]
 
@@ -83,9 +85,10 @@ def main() -> int:
     now_fn = lambda: datetime.now(ZoneInfo("Europe/Kyiv"))  # noqa: E731
     ds = MemoryDataSource.from_file(ROOT / "agent" / "seed.json", now_fn(), now_fn=now_fn)
     events, approvals = EventLog(now_fn), ApprovalStore(now_fn)
-    text = template.format(when=when(ds.get_booking(tenant_id, booking_id), now_fn()))
+    text = args.text or template.format(when=when(ds.get_booking(tenant_id, booking_id), now_fn()))
     session = Session(f"smoke-{args.scenario}", tenant_id, client_id, "chat", ds, events, approvals,
-                      llm, default_registry(), now_fn, make_orchestrator())
+                      llm, default_registry(), now_fn, make_orchestrator(),
+                      os.environ.get("AGENT_MODEL") or getattr(llm, "model", None))
 
     print(f"== Сценарій {args.scenario}: {tenant_id}/{client_id}\n> {text}")
     reply = session.send(text)

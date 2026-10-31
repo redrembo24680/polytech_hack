@@ -183,27 +183,63 @@ def test_execute_approved_holds_write_lock(sess_factory, monkeypatch):
     assert seen["locked"] is True
 
 
-def _orch(**kw):
+class _FakeAnswerer:
+    model_name = "gemma-answer"
+
+    def __init__(self, reply):
+        self.reply = reply
+
+    def answer(self, question, tenant_rules, client_summary):
+        return self.reply
+
+
+def _orch(answerer=None, **kw):
     import json
 
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
     from agent.orchestrator import Orchestrator
 
-    base = {"intent": "question", "urgency": "low", "tone": "calm", "route": "agent", "hint": "", "reply": ""}
-    return Orchestrator(FakeListChatModel(responses=[json.dumps({**base, **kw})]), "gemma-test")
+    base = {"intent": "question", "urgency": "low", "tone": "calm", "route": "agent", "hint": ""}
+    return Orchestrator(FakeListChatModel(responses=[json.dumps({**base, **kw})]), "gemma-test", answerer)
 
 
 def test_orchestrator_answer_skips_worker(sess_factory):
     fake = FakeClient([])
     s = sess_factory("lumen", "olena", fake)
-    s.orchestrator = _orch(route="answer", reply="Працюємо до 20:00.")
+    s.orchestrator = _orch(_FakeAnswerer("Працюємо до 20:00."), route="answer")
     assert s.send("До котрої працюєте?") == "Працюємо до 20:00."
     assert fake.calls == []
     ev = s.events.since(s.id)
     assert [e.type for e in ev] == ["user_message", "triage", "assistant_message"]
-    assert ev[1].payload["reply"] == "Працюємо до 20:00." and ev[1].payload["model"] == "gemma-test"
+    assert ev[1].payload["model"] == "gemma-test"
+    assert ev[2].payload == {"text": "Працюємо до 20:00.", "model": "gemma-answer"}
     assert [m.role for m in s.history] == ["user", "model"]
+
+
+def test_answer_route_without_answerer_falls_back_to_worker(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("до 20:00")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(None, route="answer")
+    assert s.send("До котрої працюєте?") == "до 20:00"
+    assert len(fake.calls) == 1
+    tri = next(e for e in s.events.since(s.id) if e.type == "triage")
+    assert tri.payload["route"] == "agent" and tri.payload["fallback"] == "answerer_unavailable"
+
+
+def test_answer_route_with_failing_answerer_falls_back(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(_FakeAnswerer(None), route="answer")
+    assert s.send("x") == "ок" and len(fake.calls) == 1
+
+
+def test_worker_reply_carries_model(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.worker_model = "claude-worker"
+    s.send("x")
+    assert s.events.since(s.id)[-1].payload == {"text": "ок", "model": "claude-worker"}
 
 
 def test_orchestrator_hint_goes_to_system_prompt(sess_factory):

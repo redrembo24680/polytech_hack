@@ -16,4 +16,4 @@
 Без HTTP той самий шлях проходить `support-agent/scripts/smoke.py` (сценарій B вирішує апрув сам).
 
 ## Крок 0: тріаж оркестратором
-Після `user_message` `Session.send` викликає `Orchestrator.triage` (Gemma 4 через LangChain) і емітить `triage`. `answer`: емітиться `assistant_message` з `reply`, воркер не викликається. `escalate` або `agent`: далі звичайний цикл, а підказка (`hint`) додається в системний промпт розділом "Підказка оркестратора". Якщо Gemma недоступна, `triage` відсутня і флоу без змін.
+Після `user_message` `Session.send` викликає `Orchestrator.triage` (Claude Sonnet через LangChain) і емітить `triage`. `answer`: `Answerer` (Gemma 4) формує відповідь, емітиться `assistant_message` з `model` відповідача, воркер не викликається; якщо відповідача немає або він не відповів, `triage` отримує `route: agent`, `fallback: answerer_unavailable`, і працює воркер. `escalate` або `agent`: далі звичайний цикл, а підказка (`hint`) додається в системний промпт розділом "Підказка оркестратора". Відповіді воркера теж мають `model`. Якщо оркестратор недоступний, `triage` відсутня і флоу без змін.

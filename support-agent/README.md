@@ -66,10 +66,10 @@ support-agent/
 - Опис фічі за кодом: `../docs/features/support-agent/` (почати з `FEATURE.md`)
 - Журнал робіт: `../docs/WORKLOG.md`
 
-## Оркестратор на Gemma 4 (LangChain)
-Gemma 4 (через LangChain: локальна Ollama `gemma4:12b` або Gemini API `gemma-4-31b-it` безкоштовно, `agent/orchestrator.py`) на кожне повідомлення клієнта робить тріаж: намір, терміновість, тон і маршрут. Основний агент (Claude або інший провайдер) лишається воркером і діє лише через tools/policy/approvals.
-- `answer`: просте питання (`question`, терміновість до `normal`) Gemma відповідає сама, воркер не викликається.
+## Оркестрація: Claude Sonnet маршрутизує, Gemma 4 відповідає на прості питання
+Claude Sonnet (через LangChain `ChatAnthropic`, `agent/orchestrator.py`) на кожне повідомлення клієнта робить тріаж: намір, терміновість, тон і маршрут. Gemma 4 (локальна Ollama `gemma4:12b` або Gemini API `gemma-4-31b-it`) відповідає лише на дуже прості питання. Основний агент (Sonnet) лишається воркером і діє лише через tools/policy/approvals.
+- `answer`: просте питання (`question`, терміновість до `normal`) відповідає Gemma 4 (`Answerer`), воркер не викликається; якщо Gemma недоступна, питання йде воркеру (`fallback: answerer_unavailable`).
 - `escalate`: скарга в гніві або дуже термінова; воркер отримує підказку викликати `escalate_to_human`.
 - `agent`: звичайний цикл; підказка оркестратора потрапляє в системний промпт цього ходу.
 Дії зі зміни запису, скасування і повернення коштів завжди йдуть через `agent` (це примусово в коді, незалежно від відповіді моделі). Подія `triage` видна в copilot і в метриках (`intents`).
-Налаштування: `ORCHESTRATOR=on|off`, `ORCHESTRATOR_PROVIDER=ollama|gemini` (за замовчуванням `ollama`), `ORCHESTRATOR_MODEL` (за замовчуванням `gemma4:12b`; для `gemini` `gemma-4-31b-it`, потрібен `GEMINI_API_KEY`, без ключа оркестратор вимкнено), `ORCHESTRATOR_BASE_URL` (лише ollama). Якщо Gemma недоступна, оркестратор мовчки пропускається.
+Налаштування: `ORCHESTRATOR=on|off`, `ORCHESTRATOR_PROVIDER=anthropic|ollama|gemini` (за замовчуванням `anthropic`, `ORCHESTRATOR_MODEL=claude-sonnet-5-5`, потрібен `ANTHROPIC_API_KEY`, без ключа оркестратор вимкнено); відповідач: `ANSWERER=on|off`, `ANSWERER_PROVIDER=ollama|gemini` (за замовчуванням `ollama`), `ANSWERER_MODEL` (`gemma4:12b`; для `gemini` `gemma-4-31b-it`), `ANSWERER_BASE_URL`. Якщо оркестратор недоступний, він мовчки пропускається.
