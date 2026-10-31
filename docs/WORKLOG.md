@@ -47,3 +47,6 @@
   Челенджі івенту: **Best Use of Gemma 4** (відкрита модель через Gemini API) і **Best Open-Source
   AI Project**. Висновок: LLM — Gemma 4 / Gemini через безкоштовний тір Gemini API (або локально
   через Ollama), це закриває обидва додаткові призи. Перевіряємо tool calling у Gemma 4.
+- Пошук Claude-кредитів: сторінка івенту MLH (партнер SKELAR) не згадує Anthropic/кредити, зате
+  має Gemma-ресурси і воркшоп про local LLMs; DevRelay офферів нуль; у вебі нічого.
+  **Рішення: Gemma 4 через Gemini API (free), SDK google-genai.** Спека агента оновлена.

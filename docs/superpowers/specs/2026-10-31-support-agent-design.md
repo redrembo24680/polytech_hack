@@ -103,18 +103,24 @@ web/
 
 ## 6. Агент (`agent.py`)
 
-- **Провайдер моделі визначається кредитами спонсорів хакатону** (через MLH DevRelay,
-  `devrelay-offers`), власні гроші на API не витрачаємо. Рішення фіксується в
-  `docs/features/support-agent/integration-points.md` після перевірки офферів.
-  Кандидати: Anthropic (`claude-opus-5-5`, Tool Runner SDK), Google Gemini (`google-genai`,
-  function calling), локальна модель через OpenAI-сумісний сервер.
+- **Провайдер: Google Gemini API, модель Gemma 4** (`gemma-4-31b-it`, запасна
+  `gemma-4-26b-a4b-it`), SDK `google-genai`, нативний function calling. Причини: на івенті немає
+  спонсорських API-кредитів (перевірено через MLH DevRelay 2026-10-31), Gemini API free-тір
+  безкоштовний, а челенджі івенту "Best Use of Gemma 4" і "Best Open-Source AI Project" дають
+  два додаткові призи. Потрібен `GEMINI_API_KEY` з aistudio.google.com (бажано два ключі,
+  твій і тіммейта, бо денні ліміти free-тіру не опубліковані).
+  Альтернативи через той самий адаптер: Anthropic `claude-opus-5-5` (якщо з'явиться ключ),
+  OpenRouter `google/gemma-4-31b-it:free` (OpenAI-сумісний).
 - Межа `llm.py`: один клас `LLM` з методом `run_turn(system, messages, tools) -> events`,
   який крутить tool-loop для обраного провайдера і віддає уніфіковані події (text, tool_call,
   tool_result, reasoning). Решта агента (policy, tools, events, API) провайдера не знає.
   Назва моделі і провайдер — env `AGENT_PROVIDER`, `AGENT_MODEL`.
-- Для Anthropic: `thinking={"type":"adaptive","display":"summarized"}`,
-  `output_config={"effort":"medium"}`, `max_tokens=4096`, `fallbacks="default"`
-  з betas `server-side-fallback-2026-07-01` (якщо `tool_runner` приймає).
+- Для Gemini/Gemma: `tools=[{"function_declarations": [...]}]`, автоматичний tool-loop
+  SDK вимкнений (`automatic_function_calling.disable=True`), loop наш, щоб між викликом і дією
+  стояв permission engine. Reasoning для copilot: модель просить коротко пояснювати перед кожним
+  tool-викликом (текстова частина відповіді), це і логуємо як `thinking`.
+- Для Anthropic (альтернатива): `thinking={"type":"adaptive","display":"summarized"}`,
+  `output_config={"effort":"medium"}`, `max_tokens=4096`.
 - Системний промпт (стабільна частина кешується через `cache_control`):
   роль, принципи (спочатку зрозумій мету, потім дані, потім дія; не вигадуй; ризикове — через
   апрув; коротко і по-людськи українською), опис карток і коли їх показувати, правило "після
@@ -199,7 +205,9 @@ Managed-платформа (Vapi або ElevenLabs Conversational) з tools, щ�
 
 ## 13. Ризики
 
-- Немає `ANTHROPIC_API_KEY` на машині — отримати до старту `agent.py`.
+- Немає `GEMINI_API_KEY` на машині — отримати на aistudio.google.com до старту `agent.py`.
+- Ліміти free-тіру Gemini невідомі — два ключі, ретраї з backoff, і OpenRouter як запасний провайдер.
+- Gemma 4 може гірше тримати багатокрокові tool-ланцюжки, ніж Claude — короткий промпт, мало tools за раз, перевірити сценарій A одразу після появи ключа; якщо погано, переключити на `gemini-2.5-flash` (теж free) через `AGENT_MODEL`.
 - MCP/API тіммейта не готовий — працюємо на MemoryDataSource до кінця, перемикання через env.
 - Розбіжність семантики MCP-tools і Protocol — контракт зафіксовано у спеці апки, розділ 4;
   будь-яка зміна іменувань узгоджується там.
