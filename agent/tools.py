@@ -1,23 +1,31 @@
+import threading
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
+from agent.cards import card_json_schema, parse_card
 from agent.context import SessionCtx, get_ctx
 from agent.datasource import DataError
 from agent.policy import Allow, Decision, Forbidden, NeedsApproval, PolicyContext, decide, is_late_change
 
 APPROVAL_INSTRUCTION = "Повідом клієнту, що уточнюєш в адміністратора, і заверши відповідь."
 
+# One process-wide lock around "policy decide + execute" for write tools and approved actions:
+# MemoryDataSource is shared by all sessions and request threads.
+WRITE_LOCK = threading.RLock()
+
 
 @dataclass
 class ToolSpec:
     name: str
     description: str
-    parameters: dict
+    parameters: dict | None  # None for tools without arguments (Gemini rejects an empty OBJECT)
     fn: Callable[..., dict]
     kind: str = "read"  # read | write | ui
     action: str | None = None  # policy action for write tools
+    precheck: Callable[..., dict | None] | None = None  # non-None result short-circuits policy and fn
 
 
 def _policy_ctx(c: SessionCtx, booking_id: str | None, amount: int | None = None) -> PolicyContext:
@@ -45,7 +53,13 @@ class ToolRegistry:
         return self._tools[name]
 
     def declarations(self) -> list[dict]:
-        return [{"name": t.name, "description": t.description, "parameters": t.parameters} for t in self._tools.values()]
+        out = []
+        for t in self._tools.values():
+            decl = {"name": t.name, "description": t.description}
+            if t.parameters:
+                decl["parameters"] = t.parameters
+            out.append(decl)
+        return out
 
     def call(self, name: str, args: dict) -> dict:
         spec = self._tools.get(name)
@@ -56,19 +70,24 @@ class ToolRegistry:
         def emit(type_: str, payload: dict) -> None:
             c.events.emit(c.session_id, c.tenant_id, type_, payload)
 
+        args = _drop_null_optionals(spec, args)
         decision: Decision | None = None
         label = {"read": "read", "ui": "ui"}.get(spec.kind, "error")
         called = False
         detail = None
         try:
             _validate_args(spec, args)
-            if spec.kind == "write":
-                # policy decision is computed BEFORE anything is executed or logged as done
-                decision = _decide_for(spec, c, args)
-                label = _decision_name(decision)
-            emit("tool_call", {"name": name, "args": args, "decision": label})
-            called = True
-            result = _run(spec, c, args, decision)
+            with WRITE_LOCK if spec.kind == "write" else nullcontext():
+                early = spec.precheck(**args) if spec.precheck else None
+                if early is not None:
+                    label = "noop"
+                elif spec.kind == "write":
+                    # policy decision is computed BEFORE anything is executed or logged as done
+                    decision = _decide_for(spec, c, args)
+                    label = _decision_name(decision)
+                emit("tool_call", {"name": name, "args": args, "decision": label})
+                called = True
+                result = early if early is not None else _run(spec, c, args, decision)
         except DataError as e:
             result = {"error": e.code, "message": e.message}
         except _ArgError as e:
@@ -78,12 +97,13 @@ class ToolRegistry:
             detail = f"{type(e).__name__}: {e}"
         if not called:  # failed before the call event was emitted
             emit("tool_call", {"name": name, "args": args, "decision": label})
+        card = result.pop("card", None) if spec.kind == "ui" else None
         payload = {"name": name, "result": result}
         if detail:
             payload["detail"] = detail
         emit("tool_result", payload)
-        if spec.kind == "ui" and result.get("status") == "shown":
-            emit("card", args["card"])
+        if card is not None:
+            emit("card", card)
         return result
 
 
@@ -91,22 +111,31 @@ class _ArgError(Exception):
     pass
 
 
-_TYPES = {"string": str, "integer": int, "object": dict}
+_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict}
 _DATE_PARAMS = {"start": datetime.fromisoformat, "from_date": date.fromisoformat, "to_date": date.fromisoformat}
 
 
+def _drop_null_optionals(spec: ToolSpec, args: dict) -> dict:
+    """Models often send `null` for an optional argument; treat it as omitted."""
+    required = set((spec.parameters or {}).get("required", []))
+    return {k: v for k, v in (args or {}).items() if v is not None or k in required}
+
+
 def _validate_args(spec: ToolSpec, args: dict) -> None:
-    props = spec.parameters["properties"]
+    """Top-level check only; nested object schemas (e.g. `card`) are validated by the tool itself."""
+    params = spec.parameters or {}
+    props = params.get("properties", {})
     unknown = sorted(set(args) - set(props))
     if unknown:
         raise _ArgError(f"Невідомі аргументи: {unknown}")
-    missing = [k for k in spec.parameters.get("required", []) if k not in args]
+    missing = [k for k in params.get("required", []) if k not in args]
     if missing:
         raise _ArgError(f"Відсутні обов'язкові аргументи: {missing}")
     for key, value in args.items():
-        expected = _TYPES[props[key]["type"]]
-        if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
-            raise _ArgError(f"Аргумент {key} має бути типу {props[key]['type']}")
+        kind = props[key]["type"]
+        expected = _TYPES[kind]
+        if not isinstance(value, expected) or (kind in ("integer", "number") and isinstance(value, bool)):
+            raise _ArgError(f"Аргумент {key} має бути типу {kind}")
         if key in _DATE_PARAMS:
             try:
                 _DATE_PARAMS[key](value)
@@ -175,23 +204,37 @@ def find_slots(service_id: str, from_date: str, to_date: str, staff_id: str | No
 
 # ---------- write tools (called only after Allow) ----------
 
+def parse_start(value: str, tz_name: str) -> datetime:
+    """ISO datetime; a naive value is taken in the tenant's timezone."""
+    dt = datetime.fromisoformat(value)
+    return dt if dt.tzinfo else dt.replace(tzinfo=ZoneInfo(tz_name))
+
+
+def goodwill_already_applied(c: SessionCtx, booking_id: str) -> bool:
+    """Source of truth is the client's data; the session set covers the current conversation."""
+    if booking_id in c.goodwill_applied:
+        return True
+    client = c.ds.get_client(c.tenant_id, c.client_id)
+    return any(g.booking_id == booking_id for g in client.goodwill_exceptions)
+
+
 def _forfeit(c: SessionCtx, booking_id: str) -> bool:
     b = _own_booking(c, booking_id)
     policy = c.ds.get_tenant(c.tenant_id).policy
-    return is_late_change(policy, b, c.now) and booking_id not in c.goodwill_applied
+    return is_late_change(policy, b, c.now) and not goodwill_already_applied(c, booking_id)
 
 
 def _saved_by_goodwill(c: SessionCtx, booking_id: str) -> dict:
     b = _own_booking(c, booking_id)
     policy = c.ds.get_tenant(c.tenant_id).policy
-    if booking_id in c.goodwill_applied and is_late_change(policy, b, c.now) and b.prepayment.status == "held":
+    if goodwill_already_applied(c, booking_id) and is_late_change(policy, b, c.now) and b.prepayment.status == "held":
         return {"saved_uah": b.prepayment.amount}
     return {}
 
 
 def reschedule_booking(booking_id: str, start: str, reason: str, staff_id: str | None = None) -> dict:
     c = get_ctx()
-    new_start = datetime.fromisoformat(start)
+    new_start = parse_start(start, c.ds.get_tenant(c.tenant_id).timezone)
     forfeit = _forfeit(c, booking_id)
     saved = _saved_by_goodwill(c, booking_id)
     b = c.ds.reschedule(c.tenant_id, booking_id, new_start, staff_id, reason, "agent", forfeit)
@@ -209,6 +252,15 @@ def cancel_booking(booking_id: str, reason: str) -> dict:
 def refund_prepayment(booking_id: str, amount: int, reason: str) -> dict:
     c = get_ctx()
     return {"booking": _booking_json(c.ds.refund(c.tenant_id, booking_id, amount, reason, "agent"))}
+
+
+def goodwill_precheck(booking_id: str, reason: str) -> dict | None:
+    c = get_ctx()
+    b = _own_booking(c, booking_id)
+    if goodwill_already_applied(c, booking_id):
+        return {"status": "done", "already_applied": True, "booking": _booking_json(b),
+                "message": "Виняток для цього бронювання вже застосовано, повторно не потрібно."}
+    return None
 
 
 def apply_goodwill_exception(booking_id: str, reason: str) -> dict:
@@ -232,8 +284,12 @@ def escalate_to_human(summary: str, priority: str) -> dict:
 
 
 def show_card(card: dict) -> dict:
-    """The registry emits the `card` event right after the tool_result."""
-    return {"status": "shown"}
+    """Validates the card; the registry pops `card` and emits it as a `card` event after the tool_result."""
+    try:
+        parsed = parse_card(card)
+    except ValueError as e:
+        raise DataError("validation", str(e)) from None
+    return {"status": "shown", "card": parsed.model_dump(mode="json")}
 
 
 def _schema(props: dict[str, tuple[str, str]], optional: tuple[str, ...] = ()) -> dict:
@@ -244,7 +300,11 @@ def _schema(props: dict[str, tuple[str, str]], optional: tuple[str, ...] = ()) -
     }
 
 
-BOOKING_ID = ("string", "Ідентифікатор бронювання, наприклад b-olena-1")
+def _card_param_schema() -> dict:
+    return {"type": "object", "properties": {"card": card_json_schema()}, "required": ["card"]}
+
+
+BOOKING_ID = ("string", "Ідентифікатор бронювання з get_client_profile (не питай його в клієнта)")
 REASON = ("string", "Причина дії, зрозуміла адміністратору")
 
 
@@ -252,7 +312,7 @@ def default_registry() -> ToolRegistry:
     reg = ToolRegistry()
     specs = [
         ToolSpec("get_client_profile", "Профіль поточного клієнта та історія його бронювань (найновіші першими).",
-                 _schema({}), get_client_profile),
+                 None, get_client_profile),
         ToolSpec("get_booking", "Деталі бронювання за ідентифікатором.", _schema({"booking_id": BOOKING_ID}), get_booking),
         ToolSpec("find_slots", "Знайти вільні слоти для послуги в діапазоні дат.", _schema({
             "service_id": ("string", "Ідентифікатор послуги"),
@@ -263,7 +323,7 @@ def default_registry() -> ToolRegistry:
         ToolSpec("reschedule_booking", "Перенести бронювання на новий час. Дія проходить перевірку політики закладу.",
                  _schema({
                      "booking_id": BOOKING_ID,
-                     "start": ("string", "Новий початок, дата й час ISO 8601"),
+                     "start": ("string", "Новий початок: дата й час ISO 8601 з часовим поясом, як у слотах find_slots"),
                      "reason": REASON,
                      "staff_id": ("string", "Ідентифікатор майстра (необов'язково)"),
                  }, optional=("staff_id",)), reschedule_booking, "write", "reschedule"),
@@ -275,7 +335,7 @@ def default_registry() -> ToolRegistry:
         ToolSpec("apply_goodwill_exception", "Застосувати виняток з доброї волі: передоплата не згорає при пізній зміні. "
                  "Дія проходить перевірку політики закладу.",
                  _schema({"booking_id": BOOKING_ID, "reason": REASON}), apply_goodwill_exception, "write",
-                 "goodwill_exception"),
+                 "goodwill_exception", goodwill_precheck),
         ToolSpec("waive_no_show_fee", "Зняти штраф за неявку. Дія проходить перевірку політики закладу.",
                  _schema({"booking_id": BOOKING_ID, "reason": REASON}), waive_no_show_fee, "write", "waive_no_show_fee"),
         ToolSpec("escalate_to_human", "Передати питання людині: створює тікет для адміністратора.",
@@ -283,8 +343,8 @@ def default_registry() -> ToolRegistry:
                      "summary": ("string", "Короткий опис проблеми"),
                      "priority": ("string", "Пріоритет: low, normal, high або urgent"),
                  }), escalate_to_human, "write", "escalate"),
-        ToolSpec("show_card", "Показати клієнту картку в чаті (слоти, підтвердження тощо).",
-                 _schema({"card": ("object", "Картка: type, title, options")}), show_card, "ui"),
+        ToolSpec("show_card", "Показати клієнту картку в чаті: slots (вибір слоту), booking_summary (запис), "
+                 "decision (підсумок рішення).", _card_param_schema(), show_card, "ui"),
     ]
     for s in specs:
         reg.register(s)

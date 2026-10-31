@@ -108,3 +108,10 @@ def test_decide_concurrent_only_one_wins():
         results = list(pool.map(work, range(16)))
     assert results.count("ok") == 1
     assert results.count("already_decided") == 15
+
+
+def test_metrics_reads_saved_uah_from_tool_result_payload():
+    log = EventLog(now_fn=lambda: T0)
+    log.emit("s1", "t1", "tool_result", {"name": "reschedule_booking", "result": {"status": "done", "saved_uah": 500}})
+    log.emit("s1", "t1", "tool_result", {"name": "get_booking", "result": {"id": "b"}})
+    assert metrics(log, ApprovalStore(now_fn=lambda: T0), "t1")["money_saved_uah"] == 500

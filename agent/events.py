@@ -134,6 +134,12 @@ class ApprovalStore:
             return approval
 
 
+def _saved_uah(payload: dict) -> int:
+    result = payload.get("result")
+    nested = result.get("saved_uah", 0) if isinstance(result, dict) else 0
+    return payload.get("saved_uah", 0) + nested
+
+
 def metrics(log: EventLog, approvals: ApprovalStore, tenant_id: str) -> dict:
     events = log.for_tenant(tenant_id)
     calls = [e for e in events if e.type == "tool_call"]
@@ -149,5 +155,5 @@ def metrics(log: EventLog, approvals: ApprovalStore, tenant_id: str) -> dict:
         "approvals_approved": sum(a.status == "approved" for a in mine),
         "approvals_rejected": sum(a.status == "rejected" for a in mine),
         "escalations": sum(e.payload.get("name") == "escalate_to_human" for e in calls),
-        "money_saved_uah": sum(e.payload.get("saved_uah", 0) for e in events if e.type == "tool_result"),
+        "money_saved_uah": sum(_saved_uah(e.payload) for e in events if e.type == "tool_result"),
     }

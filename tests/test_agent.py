@@ -87,3 +87,60 @@ def test_execute_approved_never_raises(sess_factory):
     ap = s.approvals.decide(ap.id, True, "Оля", "ок")
     bad = ap.model_copy(update={"args": {"booking_id": "b-max-1"}})
     assert execute_approved(bad, s.ctx)["error"] == "internal"
+
+
+def _approved(s, tool, args):
+    ap = s.approvals.create(s.id, s.tenant_id, tool, args, "r")
+    return s.approvals.decide(ap.id, True, "Оля", None)
+
+
+def test_scenario_c_refund_then_cancel_keeps_refunded(sess_factory):
+    s = sess_factory("denta", "petro", FakeClient([]))
+    r1 = execute_approved(_approved(s, "refund_prepayment", {"booking_id": "b-petro-1", "amount": 800, "reason": "x"}), s.ctx)
+    r2 = execute_approved(_approved(s, "cancel_booking", {"booking_id": "b-petro-1", "reason": "x"}), s.ctx)
+    assert r1["status"] == "done" and r2["status"] == "done"
+    b = s.ds.get_booking("denta", "b-petro-1")
+    assert b.status == "cancelled" and b.prepayment.status == "refunded"
+
+
+def test_execute_approved_naive_start_uses_tenant_timezone(sess_factory):
+    from datetime import timedelta
+
+    late = NOW + timedelta(days=2, hours=2)
+    s = sess_factory("lumen", "olena", FakeClient([]))
+    args = {"booking_id": "b-olena-1", "start": late.replace(tzinfo=None).isoformat(), "reason": "x"}
+    assert execute_approved(_approved(s, "reschedule_booking", args), s.ctx)["status"] == "done"
+    assert s.ds.get_booking("lumen", "b-olena-1").start == late
+
+
+def test_execute_approved_reads_goodwill_from_data(sess_factory):
+    s = sess_factory("lumen", "max", FakeClient([]))
+    s.ds.add_goodwill("lumen", "max", "b-max-1", "x", "human:Оля")  # e.g. approved in another session
+    execute_approved(_approved(s, "cancel_booking", {"booking_id": "b-max-1", "reason": "x"}), s.ctx)
+    assert s.ds.get_booking("lumen", "b-max-1").prepayment.status == "held"
+
+
+def test_execute_approved_goodwill_twice_is_noop(sess_factory):
+    s = sess_factory("lumen", "max", FakeClient([]))
+    args = {"booking_id": "b-max-1", "reason": "x"}
+    assert execute_approved(_approved(s, "apply_goodwill_exception", args), s.ctx)["status"] == "done"
+    r = execute_approved(_approved(s, "apply_goodwill_exception", args), s.ctx)
+    assert r["status"] == "done" and r["already_applied"] is True
+    assert len(s.ds.get_client("lumen", "max").goodwill_exceptions) == 1
+
+
+def test_execute_approved_holds_write_lock(sess_factory, monkeypatch):
+    from agent.tools import WRITE_LOCK
+    from tests.test_tools import _other_thread_can_acquire
+
+    s = sess_factory("denta", "petro", FakeClient([]))
+    seen = {}
+    real = s.ds.cancel
+
+    def spy(*a, **kw):
+        seen["locked"] = not _other_thread_can_acquire(WRITE_LOCK)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(s.ds, "cancel", spy)
+    execute_approved(_approved(s, "cancel_booking", {"booking_id": "b-petro-1", "reason": "x"}), s.ctx)
+    assert seen["locked"] is True

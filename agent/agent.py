@@ -7,7 +7,7 @@ from agent.events import Approval, ApprovalStore, EventLog
 from agent.llm import CallPart, LLMClient, Msg, ResultPart, TextPart
 from agent.models import Client, Tenant
 from agent.policy import is_late_change
-from agent.tools import ToolRegistry
+from agent.tools import WRITE_LOCK, ToolRegistry, goodwill_already_applied, parse_start
 
 MAX_ITER_TEXT = "Вибачте, не вдалося завершити обробку. Передаю запит адміністратору."
 LLM_ERROR_TEXT = "Вибачте, сталася технічна помилка. Спробуйте ще раз за хвилину."
@@ -100,16 +100,22 @@ def execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
     """Викликати рівно один раз після decide(); повторний виклик не захищений тут."""
     if approval.status != "approved":
         return {"error": "not_approved", "message": "Апрув не схвалено."}
+    with WRITE_LOCK:
+        return _execute_approved(approval, ctx)
+
+
+def _execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
     by = f"human:{approval.decided_by or 'адміністратор'}"
     a, ds, t = approval.args, ctx.ds, approval.tenant_id
     try:
         if approval.tool in ("reschedule_booking", "cancel_booking"):
             b = ds.get_booking(t, a["booking_id"])
-            forfeit = is_late_change(ds.get_tenant(t).policy, b, ctx.now) and a["booking_id"] not in ctx.goodwill_applied
+            tenant = ds.get_tenant(t)
+            forfeit = is_late_change(tenant.policy, b, ctx.now) and not goodwill_already_applied(ctx, a["booking_id"])
             if approval.tool == "cancel_booking":
                 out = ds.cancel(t, a["booking_id"], a["reason"], by, forfeit)
             else:
-                out = ds.reschedule(t, a["booking_id"], datetime.fromisoformat(a["start"]),
+                out = ds.reschedule(t, a["booking_id"], parse_start(a["start"], tenant.timezone),
                                     a.get("staff_id"), a["reason"], by, forfeit)
             return {"status": "done", "booking": out.model_dump(mode="json")}
         if approval.tool == "refund_prepayment":
@@ -117,6 +123,8 @@ def execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
         elif approval.tool == "waive_no_show_fee":
             out = ds.waive_no_show(t, a["booking_id"], a["reason"], by)
         elif approval.tool == "apply_goodwill_exception":
+            if goodwill_already_applied(ctx, a["booking_id"]):
+                return {"status": "done", "already_applied": True}
             out = ds.add_goodwill(t, ctx.client_id, a["booking_id"], a["reason"], by)
             ctx.goodwill_applied.add(a["booking_id"])
             return {"status": "done", "client": out.model_dump(mode="json")}
