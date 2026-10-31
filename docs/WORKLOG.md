@@ -63,3 +63,7 @@
   - Task 7 ✅ FastAPI: sessions, messages, events, approvals/decide, metrics, static web (96 тестів). Фікс: виконання апруву під локом сесії, плоскі помилки, контракт при збої після виконання.
   - Відкрито: dev-залежність `httpx2` (прибирає попередження Starlette у тестах) — інсталяцію субагенту заблокував permission-класифікатор; рішення за користувачем (`uv add --dev httpx2`).
 - Task 9: smoke script, feature docs, README; live run: pending key
+  - Task 8 ✅ web UI: чат клієнта з картками + copilot (події, апруви, метрики), без правок після рев'ю.
+  - Task 9 ✅ smoke-скрипт, .env.example, 10 файлів `docs/features/support-agent/`, README. Живий прогін Gemma 4 відкладено до появи `GEMINI_API_KEY`.
+  - Контракт апки доповнено: `list_clients`, `list_client_bookings`.
+  - Фінальне рев'ю всієї гілки `feat/agent` запущено (Opus).
