@@ -63,6 +63,8 @@ def decide(action: Action, ctx: PolicyContext) -> Decision:
         amount = ctx.amount
         if amount is None or amount <= 0:
             return NeedsApproval("Суму повернення не вказано або вона недійсна, тому потрібне підтвердження людини.")
+        if ctx.booking is not None and ctx.booking.status == "scheduled":
+            return NeedsApproval("Повернення по активному запису вирішує адміністратор.")
         limit = perms.refund_auto_limit
         if amount <= limit:
             return Allow(f"Сума повернення {amount} грн не перевищує автоматичний ліміт {limit} грн.")

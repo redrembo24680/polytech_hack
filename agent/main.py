@@ -46,7 +46,7 @@ class Decision(BaseModel):
 
 def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
     now_fn = now_fn or (lambda: datetime.now(ZoneInfo("Europe/Kyiv")))
-    ds = ds or MemoryDataSource.from_file(Path(__file__).parent / "seed.json", now_fn())
+    ds = ds or MemoryDataSource.from_file(Path(__file__).parent / "seed.json", now_fn(), now_fn=now_fn)
     app = FastAPI(title="Support agent")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     st = app.state

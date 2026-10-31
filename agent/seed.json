@@ -6,7 +6,7 @@
       "kind": "salon",
       "timezone": "Europe/Kyiv",
       "policy": {
-        "rules_text": "Скасування менш ніж за 24 години — депозит не повертаємо. Постійним клієнтам без неявок один раз на пів року йдемо назустріч. У суботу перенесення тільки через адміністратора.",
+        "rules_text": "Скасування менш ніж за 24 години — депозит не повертаємо. Постійним клієнтам без неявок один раз на пів року йдемо назустріч.",
         "cancellation_window_hours": 24,
         "late_change_forfeits_prepayment": true,
         "no_show_fee": 300,
@@ -36,8 +36,8 @@
          "goodwill_exceptions": [{"days_ago": 30, "booking_id": "b-ira-0", "reason": "Хвороба"}], "notes": ""}
       ],
       "bookings": [
-        {"id": "b-olena-1", "client_id": "olena", "staff_id": "st-maria", "service_id": "svc-cut", "day_offset": 1, "time": "10:00", "status": "scheduled", "prepayment": {"amount": 500, "status": "held"}},
-        {"id": "b-max-1", "client_id": "max", "staff_id": "st-olha", "service_id": "svc-cut", "day_offset": 1, "time": "11:00", "status": "scheduled", "prepayment": {"amount": 400, "status": "held"}},
+        {"id": "b-olena-1", "client_id": "olena", "staff_id": "st-maria", "service_id": "svc-cut", "hours_ahead": 22, "status": "scheduled", "prepayment": {"amount": 500, "status": "held"}},
+        {"id": "b-max-1", "client_id": "max", "staff_id": "st-olha", "service_id": "svc-cut", "hours_ahead": 23, "status": "scheduled", "prepayment": {"amount": 400, "status": "held"}},
         {"id": "b-ira-1", "client_id": "ira", "staff_id": "st-maria", "service_id": "svc-cut", "day_offset": 3, "time": "15:00", "status": "scheduled", "prepayment": {"amount": 500, "status": "held"}}
       ]
     },
@@ -75,7 +75,7 @@
         {"id": "anna", "name": "Анна", "phone": "+380502220002", "visits_count": 1, "no_show_count": 1, "goodwill_exceptions": [], "notes": "Неявка, нараховано штраф 500 грн"}
       ],
       "bookings": [
-        {"id": "b-petro-1", "client_id": "petro", "staff_id": "st-ivan", "service_id": "svc-consult", "day_offset": 1, "time": "09:00", "status": "scheduled", "prepayment": {"amount": 800, "status": "held"}},
+        {"id": "b-petro-1", "client_id": "petro", "staff_id": "st-ivan", "service_id": "svc-consult", "hours_ahead": 21, "status": "scheduled", "prepayment": {"amount": 800, "status": "held"}},
         {"id": "b-anna-1", "client_id": "anna", "staff_id": "st-oksana", "service_id": "svc-consult", "day_offset": -1, "time": "10:00", "status": "no_show", "prepayment": {"amount": 0, "status": "none"}}
       ]
     }

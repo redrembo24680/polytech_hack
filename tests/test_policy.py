@@ -12,12 +12,25 @@ def test_mode_approval():
     assert isinstance(decide("cancel", ctx("denta", "petro", "b-petro-1")), NeedsApproval)
 
 
-def test_refund_under_limit_allowed():
-    assert isinstance(decide("refund", ctx("lumen", "olena", "b-olena-1", amount=500)), Allow)
+def _with_status(c: PolicyContext, status: str) -> PolicyContext:
+    b = c.booking.model_copy(update={"status": status})
+    return PolicyContext(policy=c.policy, client=c.client, booking=b, now=c.now, amount=c.amount)
+
+
+def test_refund_under_limit_allowed_for_cancelled_booking():
+    c = _with_status(ctx("lumen", "olena", "b-olena-1", amount=500), "cancelled")
+    assert isinstance(decide("refund", c), Allow)
+
+
+def test_refund_on_scheduled_booking_needs_approval_even_under_limit():
+    d = decide("refund", ctx("lumen", "olena", "b-olena-1", amount=100))
+    assert isinstance(d, NeedsApproval) and "активному запису" in d.reason
 
 
 def test_refund_over_limit_needs_approval():
-    assert isinstance(decide("refund", ctx("lumen", "olena", "b-olena-1", amount=501)), NeedsApproval)
+    c = _with_status(ctx("lumen", "olena", "b-olena-1", amount=501), "cancelled")
+    d = decide("refund", c)
+    assert isinstance(d, NeedsApproval) and "ліміт" in d.reason
 
 
 def test_goodwill_allowed_for_loyal_client():

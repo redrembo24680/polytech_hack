@@ -159,3 +159,15 @@ def test_resume_failure_returns_result(monkeypatch):
     assert body["error"]["error"] == "resume_failed"
     evs = c.get("/sessions/s-1/events").json()["events"]
     assert evs[-1]["type"] == "error" and evs[-1]["payload"]["message"] == "kaput"
+
+
+def test_default_datasource_uses_live_clock():
+    from datetime import timedelta
+
+    clock = {"now": NOW}
+    app = create_app(llm=FakeClient([]), now_fn=lambda: clock["now"])
+    ds = app.state.ds
+    assert ds.get_booking("lumen", "b-olena-1").start == NOW.replace(hour=10) + timedelta(days=1)
+    clock["now"] = NOW + timedelta(days=1, hours=1)
+    b = ds.cancel("lumen", "b-max-1", "x", "agent", False)
+    assert b.history[-1].ts == clock["now"]

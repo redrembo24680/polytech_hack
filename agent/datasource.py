@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Protocol
@@ -41,21 +42,6 @@ class DataSource(Protocol):
     def find_slots(
         self, tenant_id: str, service_id: str, from_dt: datetime, to_dt: datetime, staff_id: str | None = None
     ) -> list[Slot]: ...
-    def _validate_start(self, tenant_id: str, service_id: str, staff_id: str, start: datetime, end: datetime) -> None:
-        if start < self._now:
-            raise DataError("validation", "Не можна перенести бронювання на час у минулому")
-        if service_id not in self._staff[tenant_id][staff_id].service_ids:
-            raise DataError("validation", "Цей майстер не надає обрану послугу")
-        tz = ZoneInfo(self._tenants[tenant_id].timezone)
-        local_start, local_end = start.astimezone(tz), end.astimezone(tz)
-        open_t, close_t = self._hours[tenant_id][staff_id]
-        if (
-            local_start.date() != local_end.date()
-            or local_start.time() < open_t
-            or local_end.time() > close_t
-        ):
-            raise DataError("validation", "Цей час поза робочими годинами майстра")
-
     def reschedule(
         self, tenant_id: str, booking_id: str, start: datetime, staff_id: str | None,
         reason: str, by: str, forfeit_prepayment: bool,
@@ -69,8 +55,10 @@ class DataSource(Protocol):
 
 
 class MemoryDataSource(DataSource):
-    def __init__(self, seed: dict, now: datetime):
+    def __init__(self, seed: dict, now: datetime, now_fn: Callable[[], datetime] | None = None):
+        """`now` seeds the demo data; `now_fn` (default: frozen `now`) drives validation and timestamps."""
         self._now = now
+        self._now_fn = now_fn or (lambda: now)
         self._tenants: dict[str, Tenant] = {}
         self._services: dict[str, dict[str, Service]] = {}
         self._staff: dict[str, dict[str, Staff]] = {}
@@ -83,8 +71,8 @@ class MemoryDataSource(DataSource):
             self._load_tenant(t)
 
     @classmethod
-    def from_file(cls, path: Path, now: datetime) -> "MemoryDataSource":
-        return cls(json.loads(Path(path).read_text(encoding="utf-8")), now)
+    def from_file(cls, path: Path, now: datetime, now_fn: Callable[[], datetime] | None = None) -> "MemoryDataSource":
+        return cls(json.loads(Path(path).read_text(encoding="utf-8")), now, now_fn)
 
     # ---- seed loading ----
 
@@ -118,9 +106,13 @@ class MemoryDataSource(DataSource):
             )
         self._bookings[tid] = {}
         for b in t["bookings"]:
-            hh, mm = map(int, b["time"].split(":"))
-            day = (self._now + timedelta(days=b["day_offset"])).astimezone(tz)
-            start = day.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if "hours_ahead" in b:
+                hour = self._now.astimezone(tz).replace(minute=0, second=0, microsecond=0)
+                start = hour + timedelta(hours=b["hours_ahead"])
+            else:
+                hh, mm = map(int, b["time"].split(":"))
+                day = (self._now + timedelta(days=b["day_offset"])).astimezone(tz)
+                start = day.replace(hour=hh, minute=mm, second=0, microsecond=0)
             duration = self._services[tid][b["service_id"]].duration_min
             self._bookings[tid][b["id"]] = Booking(
                 id=b["id"], tenant_id=tid, client_id=b["client_id"], staff_id=b["staff_id"],
@@ -186,6 +178,7 @@ class MemoryDataSource(DataSource):
             if service_id in s.service_ids and (staff_id is None or s.id == staff_id)
         ]
         slots: list[Slot] = []
+        now = self._now_fn()
         day = from_dt.astimezone(tz).date()
         last_day = to_dt.astimezone(tz).date()
         while day <= last_day:
@@ -194,7 +187,7 @@ class MemoryDataSource(DataSource):
                 cur = datetime.combine(day, open_t, tzinfo=tz)
                 close = datetime.combine(day, close_t, tzinfo=tz)
                 while cur + duration <= close:
-                    if cur >= self._now and self._is_free(tenant_id, s.id, cur, cur + duration):
+                    if cur >= now and self._is_free(tenant_id, s.id, cur, cur + duration):
                         slots.append(Slot(staff_id=s.id, staff_name=s.name, start=cur, end=cur + duration))
                     cur += SLOT_STEP
             day += timedelta(days=1)
@@ -203,8 +196,23 @@ class MemoryDataSource(DataSource):
 
     # ---- mutations ----
 
+    def _validate_start(self, tenant_id: str, service_id: str, staff_id: str, start: datetime, end: datetime) -> None:
+        if start < self._now_fn():
+            raise DataError("validation", "Не можна перенести бронювання на час у минулому")
+        if service_id not in self._staff[tenant_id][staff_id].service_ids:
+            raise DataError("validation", "Цей майстер не надає обрану послугу")
+        tz = ZoneInfo(self._tenants[tenant_id].timezone)
+        local_start, local_end = start.astimezone(tz), end.astimezone(tz)
+        open_t, close_t = self._hours[tenant_id][staff_id]
+        if (
+            local_start.date() != local_end.date()
+            or local_start.time() < open_t
+            or local_end.time() > close_t
+        ):
+            raise DataError("validation", "Цей час поза робочими годинами майстра")
+
     def _log(self, booking: Booking, event: str, by: str, note: str) -> None:
-        booking.history.append(HistoryEntry(ts=self._now, event=event, by=by, note=note))
+        booking.history.append(HistoryEntry(ts=self._now_fn(), event=event, by=by, note=note))
 
     def reschedule(
         self, tenant_id: str, booking_id: str, start: datetime, staff_id: str | None,
@@ -221,7 +229,7 @@ class MemoryDataSource(DataSource):
         if not self._is_free(tenant_id, target_staff, start, end, ignore=b.id):
             raise DataError("slot_taken", "Цей слот уже зайнятий")
         b.start, b.end, b.staff_id = start, end, target_staff
-        if forfeit_prepayment:
+        if forfeit_prepayment and b.prepayment.status == "held":
             b.prepayment.status = "forfeited"
         self._log(b, "rescheduled", by, reason)
         return b
@@ -231,7 +239,7 @@ class MemoryDataSource(DataSource):
         if b.status != "scheduled":
             raise DataError("invalid_state", f"Бронювання {booking_id} має статус {b.status}, скасувати неможливо")
         b.status = "cancelled"
-        if forfeit_prepayment:
+        if forfeit_prepayment and b.prepayment.status == "held":
             b.prepayment.status = "forfeited"
         self._log(b, "cancelled", by, reason)
         return b
@@ -256,7 +264,7 @@ class MemoryDataSource(DataSource):
     def add_goodwill(self, tenant_id: str, client_id: str, booking_id: str, reason: str, by: str) -> Client:
         c = self.get_client(tenant_id, client_id)
         b = self.get_booking(tenant_id, booking_id)
-        c.goodwill_exceptions.append(GoodwillException(date=self._now, booking_id=booking_id, reason=reason))
+        c.goodwill_exceptions.append(GoodwillException(date=self._now_fn(), booking_id=booking_id, reason=reason))
         self._log(b, "goodwill_applied", by, reason)
         return c
 
@@ -264,7 +272,7 @@ class MemoryDataSource(DataSource):
         self.get_client(tenant_id, client_id)
         msg = OutgoingMessage(
             id=f"msg-{len(self._messages) + 1}", tenant_id=tenant_id, client_id=client_id,
-            channel=channel, text=text, ts=self._now,
+            channel=channel, text=text, ts=self._now_fn(),
         )
         self._messages.append(msg)
         return msg
@@ -273,7 +281,7 @@ class MemoryDataSource(DataSource):
         self.get_client(tenant_id, client_id)
         ticket = Ticket(
             id=f"tkt-{len(self._tickets) + 1}", tenant_id=tenant_id, client_id=client_id,
-            summary=summary, priority=priority, status="open", ts=self._now,
+            summary=summary, priority=priority, status="open", ts=self._now_fn(),
         )
         self._tickets.append(ticket)
         return ticket
