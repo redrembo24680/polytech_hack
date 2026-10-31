@@ -1,7 +1,33 @@
 {
-  "_comment": "точки входу в код: HTTP/MCP ендпоінти, CLI, UI-сторінки. Заповнювати під час імплементації.",
-  "http": [],
+  "http": [
+    {"method": "POST", "path": "/sessions", "handler": "agent.main:create_session", "body": {"tenant_id": "str", "client_id": "str", "channel": "str = chat"}},
+    {"method": "POST", "path": "/sessions/{session_id}/messages", "handler": "agent.main:post_message", "body": {"text": "str"}},
+    {"method": "GET", "path": "/sessions/{session_id}/events", "handler": "agent.main:get_events", "query": {"after": "int = 0"}},
+    {"method": "GET", "path": "/tenants/{tenant_id}", "handler": "agent.main:get_tenant"},
+    {"method": "GET", "path": "/tenants/{tenant_id}/approvals", "handler": "agent.main:list_approvals", "query": {"status": "pending"}},
+    {"method": "GET", "path": "/tenants/{tenant_id}/metrics", "handler": "agent.main:get_metrics"},
+    {"method": "POST", "path": "/approvals/{approval_id}/decide", "handler": "agent.main:decide", "body": {"approve": "bool", "note": "str|null", "by": "str"}},
+    {"method": "GET", "path": "/", "handler": "starlette.staticfiles.StaticFiles(support-agent/web/)", "note": "статичний фронт"}
+  ],
+  "tools": [
+    {"name": "get_client_profile", "kind": "read", "handler": "agent.tools:get_client_profile"},
+    {"name": "get_booking", "kind": "read", "handler": "agent.tools:get_booking"},
+    {"name": "find_slots", "kind": "read", "handler": "agent.tools:find_slots"},
+    {"name": "reschedule_booking", "kind": "write", "policy_action": "reschedule", "handler": "agent.tools:reschedule_booking"},
+    {"name": "cancel_booking", "kind": "write", "policy_action": "cancel", "handler": "agent.tools:cancel_booking"},
+    {"name": "refund_prepayment", "kind": "write", "policy_action": "refund", "handler": "agent.tools:refund_prepayment"},
+    {"name": "apply_goodwill_exception", "kind": "write", "policy_action": "goodwill_exception", "handler": "agent.tools:apply_goodwill_exception"},
+    {"name": "waive_no_show_fee", "kind": "write", "policy_action": "waive_no_show_fee", "handler": "agent.tools:waive_no_show_fee"},
+    {"name": "escalate_to_human", "kind": "write", "policy_action": "escalate", "handler": "agent.tools:escalate_to_human"},
+    {"name": "show_card", "kind": "ui", "handler": "agent.tools:show_card"}
+  ],
   "mcp_tools": [],
-  "ui": [],
-  "cli": []
+  "ui": [
+    {"path": "/", "file": "support-agent/web/index.html", "description": "чат клієнта і copilot адміністратора"}
+  ],
+  "cli": [
+    {"command": "uv run uvicorn agent.main:app --port 8000", "description": "запуск API і фронту"},
+    {"command": "cd support-agent && uv run python scripts/smoke.py --scenario A|B|C", "description": "консольний прогін демо-сценарію через Session", "exit_codes": {"0": "завершено", "1": "подія error", "2": "немає GEMINI_API_KEY"}},
+    {"command": "uv run pytest -q", "description": "тести без мережі"}
+  ]
 }

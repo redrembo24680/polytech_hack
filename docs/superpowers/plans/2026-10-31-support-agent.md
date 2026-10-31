@@ -32,6 +32,8 @@
 
 ## File Structure
 
+> Після реструктуризації всі шляхи нижче та в задачах відносні до `support-agent/` (напр. `agent/main.py` = `support-agent/agent/main.py`); тести й `uv` запускаються з цієї папки.
+
 ```
 pyproject.toml                 uv-проєкт, залежності, pytest config
 agent/__init__.py
@@ -73,7 +75,7 @@ tests/test_api.py
   - `class DataError(Exception)`: `code: str` ∈ {`not_found`,`invalid_state`,`slot_taken`,`validation`}, `message: str`.
   - `class DataSource(Protocol)` з методами: `get_tenant(tenant_id) -> Tenant`, `get_client(tenant_id, client_id) -> Client`, `find_client_by_phone(tenant_id, phone) -> list[Client]`, `list_client_bookings(tenant_id, client_id) -> list[Booking]` (нові зверху), `get_booking(tenant_id, booking_id) -> Booking`, `find_slots(tenant_id, service_id, from_dt, to_dt, staff_id=None) -> list[Slot]`, `reschedule(tenant_id, booking_id, start, staff_id, reason, by, forfeit_prepayment) -> Booking`, `cancel(tenant_id, booking_id, reason, by, forfeit_prepayment) -> Booking`, `refund(tenant_id, booking_id, amount, reason, by) -> Booking`, `waive_no_show(tenant_id, booking_id, reason, by) -> Booking`, `add_goodwill(tenant_id, client_id, booking_id, reason, by) -> Client`, `send_message(tenant_id, client_id, channel, text) -> OutgoingMessage`, `create_ticket(tenant_id, client_id, summary, priority) -> Ticket`.
   - `class MemoryDataSource(DataSource)`: `__init__(self, seed: dict, now: datetime)`; `@classmethod from_file(path, now)`.
-- Seed format (`agent/seed.json`): як у спеці апки розділ 5 + `rules_text`; дати бронювань відносні: `"day_offset": 1, "time": "10:00"`; робочі години майстрів `"hours": ["10:00","19:00"]`, крок 60 хв. Ід тенантів: `lumen`, `denta`. Ід бронювань: `b-olena-1`, `b-max-1`, `b-ira-1`, `b-petro-1`, `b-anna-1` (status `no_show`, `day_offset: -1`). Сервіси: `lumen`: `svc-cut` "Стрижка + укладка" 60 хв 800; `denta`: `svc-consult` "Консультація" 60 хв 1200. Майстри: `lumen`: `st-maria` Марія, `st-olha` Ольга; `denta`: `st-ivan` Іван, `st-oksana` Оксана.
+- Seed format (`agent/seed.json`): як у спеці апки розділ 5 + `rules_text`; дати бронювань відносні: `"day_offset": 1, "time": "10:00"`; робочі години майстрів `"hours": ["10:00","19:00"]`, крок 60 хв. Ід тенантів: `lumen`, `denta`. Ід бронювань: `b-olena-1` (st-maria), `b-max-1` (st-olha, завтра 11:00), `b-ira-1` (st-maria), `b-petro-1` (st-ivan), `b-anna-1` (st-oksana, status `no_show`, `day_offset: -1`). Сервіси: `lumen`: `svc-cut` "Стрижка + укладка" 60 хв 800; `denta`: `svc-consult` "Консультація" 60 хв 1200. Майстри: `lumen`: `st-maria` Марія, `st-olha` Ольга; `denta`: `st-ivan` Іван, `st-oksana` Оксана.
 
 - [ ] **Step 1: Scaffold project**
 
@@ -116,7 +118,7 @@ def test_reschedule_moves_and_keeps_prepayment(ds):
     assert b.start == new and b.prepayment.status == "held" and b.history[-1].event == "rescheduled"
 def test_reschedule_to_taken_slot_raises(ds):
     taken = ds.get_booking("lumen", "b-max-1").start
-    with pytest.raises(DataError) as e: ds.reschedule("lumen", "b-olena-1", taken, None, "x", "agent", False)
+    with pytest.raises(DataError) as e: ds.reschedule("lumen", "b-olena-1", taken, "st-olha", "x", "agent", False)
     assert e.value.code == "slot_taken"
 def test_reschedule_cancelled_is_invalid_state(ds):
     ds.cancel("lumen", "b-olena-1", "x", "agent", forfeit_prepayment=False)

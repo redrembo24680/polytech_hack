@@ -42,3 +42,8 @@
 ## Оцінювання (із брифу)
 Operational Impact · Innovation · Use of AI · Reasoning & Context Handling · Presentation & Demo.
 Очікуваний результат: MVP + демо реалістичного support-сценарію + приклад, де AI виконує дію.
+
+## Структура репо
+- `support-agent/` — наш агент (Python/uv: `agent/`, `web/`, `tests/`, `scripts/`). Усі команди з цієї папки; тести: `cd support-agent && uv run pytest -q`.
+- `app/` — платформа бронювань тіммейта (ще не додана).
+- `docs/` — спільні спеки, плани, WORKLOG, feature docs.

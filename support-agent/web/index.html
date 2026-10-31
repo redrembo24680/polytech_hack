@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-агент підтримки — демо</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>AI-агент підтримки</h1>
+  <label>Бізнес <select id="tenant"><option value="lumen">lumen</option><option value="denta">denta</option></select></label>
+  <label>Клієнт <select id="client"></select></label>
+  <button id="new-session">Нова сесія</button>
+  <span id="session-id" class="muted"></span>
+</header>
+<main>
+  <section class="pane chat-pane">
+    <h2>Чат клієнта</h2>
+    <div id="chat" class="scroll"></div>
+    <div id="typing" class="typing" hidden>агент думає…</div>
+    <form id="composer">
+      <input id="text" autocomplete="off" placeholder="Напишіть повідомлення…" disabled>
+      <button id="send" type="submit" disabled>Надіслати</button>
+    </form>
+  </section>
+  <section class="pane copilot-pane">
+    <h2>Copilot адміністратора</h2>
+    <h3>Метрики</h3>
+    <div id="metrics" class="metrics"></div>
+    <h3>Апруви <span id="approvals-count" class="badge b-needs_approval">0</span></h3>
+    <div id="approvals" class="approvals"></div>
+    <h3>Стрічка подій</h3>
+    <div id="feed" class="scroll feed"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -53,3 +53,23 @@
 - Рішення: DevRelay-кредити не чекаємо. Написано план `docs/superpowers/plans/2026-10-31-support-agent.md`
   (11 задач, 9 основних + 2 stretch). Виконання: subagent-driven-development, TDD, субагенти на Sonnet,
   оркестратор — ця сесія.
+- Імплементація (гілка `feat/agent`, SDD: Sonnet-імплементер → Sonnet/Haiku-рев'юер на кожну задачу):
+  - Task 1 ✅ models + seed.json + MemoryDataSource (19 тестів). Фікс: укр. повідомлення помилок, валідація reschedule.
+  - Task 2 ✅ permission engine `policy.py` (40 тестів). Фікс: refund без суми → апрув, невідомий режим → ValueError (fail-closed).
+  - Task 3 ✅ EventLog / ApprovalStore / metrics (46 тестів). Фікс: locks для threadpool.
+  - Task 4 ✅ tools з policy gating (69 тестів). Фікс: перевірка власника бронювання, валідація аргументів per-tool, registry ніколи не кидає.
+  - Task 5 ✅ LLM-адаптер: GeminiClient (google-genai 2.34) + FakeClient (74 тестів), без правок.
+  - Task 6 ✅ agent loop + системний промпт + Session + execute_approved (83 тестів). Фікс: перевірка статусу апруву, never-raises.
+  - Task 7 ✅ FastAPI: sessions, messages, events, approvals/decide, metrics, static web (96 тестів). Фікс: виконання апруву під локом сесії, плоскі помилки, контракт при збої після виконання.
+  - Відкрито: dev-залежність `httpx2` (прибирає попередження Starlette у тестах) — інсталяцію субагенту заблокував permission-класифікатор; рішення за користувачем (`uv add --dev httpx2`).
+- Task 9: smoke script, feature docs, README; live run: pending key
+  - Task 8 ✅ web UI: чат клієнта з картками + copilot (події, апруви, метрики), без правок після рев'ю.
+  - Task 9 ✅ smoke-скрипт, .env.example, 10 файлів `docs/features/support-agent/`, README. Живий прогін Gemma 4 відкладено до появи `GEMINI_API_KEY`.
+  - Контракт апки доповнено: `list_clients`, `list_client_bookings`.
+  - Фінальне рев'ю всієї гілки `feat/agent` запущено (Opus).
+- Фікс-хвиля після фінального рев'ю гілки `feat/agent` (137 тестів):
+  - Policy/дані: повернення по активному запису лише через апрув; forfeit лише з `held` (скасування після повернення лишає `refunded`); демо-бронювання відносно старту (`hours_ahead`), `MemoryDataSource(seed, now, now_fn)`; з rules_text Lumen прибрано "субота через адміністратора" (жодні ворота цього не виражають).
+  - Tools: `agent/cards.py` (pydantic-картки, `parse_card`, Gemini-схема `card`), no-arg tools без `parameters`, `null` в optional відкидається, naive `start` → таймзона тенанта, goodwill з даних + `already_applied`, `WRITE_LOCK`; метрика `money_saved_uah` тепер читає `tool_result.result.saved_uah`.
+  - Агент/LLM: клієнт бачить запасний текст при помилці LLM / max_iter / порожній відповіді; промпт з днем тижня, прикладами карток і правилами (goodwill перед зміною, refund перед cancel, id з профілю, без null, [SYSTEM]); thought-частини пропускаються, `thought_signature` зберігається; ретраї 429/5xx; fake-провайдер відповідає завжди; 503 без ключа.
+  - Web/доки/smoke: захисний `renderCard`, `decided_by`; smoke підставляє реальний час запису, вибирає перший слот у A, схвалює апруви в B і C, без ключа → код 2.
+- Агент перенесено в `support-agent/` (корінь репо: support-agent/, app/, docs/).
