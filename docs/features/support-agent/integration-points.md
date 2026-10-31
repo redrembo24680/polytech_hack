@@ -31,5 +31,6 @@
 - Фронт `support-agent/web/` викликає лише API агента (той самий origin, CORS відкритий).
 - Адмінка апки може брати чергу апрувів з `GET /tenants/{id}/approvals` і метрики з `/metrics`.
 
-## Gemma 4 / Ollama (оркестратор)
+## Gemma 4 / Ollama / Gemini API (оркестратор)
+`ORCHESTRATOR_PROVIDER=gemini`: `langchain-google-genai` `ChatGoogleGenerativeAI` (`GEMINI_API_KEY`, модель `gemma-4-31b-it`, безкоштовно); без ключа оркестратор вимкнено. За замовчуванням (`ollama`):
 `langchain-ollama` `ChatOllama` -> `ORCHESTRATOR_BASE_URL` (за замовчуванням `http://localhost:11434`), модель `ORCHESTRATOR_MODEL`. Окремо від провайдера воркера (`AGENT_PROVIDER`). Оркестратор не має доступу до tools і даних апки, лише до `rules_text` і короткого опису клієнта.

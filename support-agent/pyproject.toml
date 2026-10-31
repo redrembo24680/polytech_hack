@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=2.3.0",
     "langchain-core>=1.7.3",
     "langchain-ollama>=1.1.0",
+    "langchain-google-genai>=4.4.2",
 ]
 
 [dependency-groups]

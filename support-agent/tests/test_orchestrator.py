@@ -70,4 +70,39 @@ def test_make_orchestrator_off_and_no_network(monkeypatch):
     assert make_orchestrator() is None
     monkeypatch.setenv("ORCHESTRATOR", "on")
     o = make_orchestrator()
-    assert o is not None and o.model_name == "gemma4:31b-cloud"
+    assert o is not None and o.model_name == "gemma4:12b"
+
+
+def _chat_of(o):
+    return o._chain.steps[1] if hasattr(o._chain, "steps") else o._chain.middle[0]
+
+
+def test_default_provider_is_ollama(monkeypatch):
+    from langchain_ollama import ChatOllama
+
+    for k in ("ORCHESTRATOR_PROVIDER", "ORCHESTRATOR_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    o = make_orchestrator()
+    chat = _chat_of(o)
+    assert isinstance(chat, ChatOllama) and chat.model == "gemma4:12b"
+
+
+def test_gemini_provider_builds_google_model(monkeypatch):
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    monkeypatch.delenv("ORCHESTRATOR_MODEL", raising=False)
+    o = make_orchestrator()
+    assert o is not None and o.model_name == "gemma-4-31b-it"
+    chat = _chat_of(o)
+    assert isinstance(chat, ChatGoogleGenerativeAI) and chat.model.endswith("gemma-4-31b-it")
+
+
+def test_gemini_provider_without_key_disabled(monkeypatch):
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert make_orchestrator() is None

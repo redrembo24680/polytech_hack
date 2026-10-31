@@ -398,6 +398,15 @@ wheels = [
 ]
 
 [[package]]
+name = "filetype"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/29/745f7d30d47fe0f251d3ad3dc2978a23141917661998763bebb6da007eb1/filetype-1.2.0.tar.gz", hash = "sha256:66b56cd6474bf41d8c54660347d37afcc3f7d1970648de365c102ef77548aadb", size = 998020, upload-time = "2022-11-02T17:34:04.141Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/79/1b8fa1bb3568781e84c9200f951c735f3f157429f44be0495da55894d620/filetype-1.2.0-py2.py3-none-any.whl", hash = "sha256:7ce71b6880181241cf7ac8697a2f1eb6a8bd9b429f7ad6d27b8db9ba5f1c2d25", size = 19970, upload-time = "2022-11-02T17:34:01.425Z" },
+]
+
+[[package]]
 name = "google-auth"
 version = "2.62.0"
 source = { registry = "https://pypi.org/simple" }
@@ -755,6 +764,21 @@ wheels = [
 ]
 
 [[package]]
+name = "langchain-google-genai"
+version = "4.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "filetype" },
+    { name = "google-genai" },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/c5/dce61b4fb570012c4a856d971626355bd29c9425af7195e2c242e77297f8/langchain_google_genai-4.4.2.tar.gz", hash = "sha256:0872df6de1ebf031c4dad59aead504f168ff31a4d73ea74e52bb1fcdb8f4ab91", size = 379336, upload-time = "2026-10-13T17:25:46.943Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/70/7a434c9b97ff360344c99009f960d45810c7e6bb572e5aadf114aa02eded/langchain_google_genai-4.4.2-py3-none-any.whl", hash = "sha256:db68bd24e5372b2688f6902e47521a6802bfecc36e2d5bbff14076f8cbb26c83", size = 81915, upload-time = "2026-10-13T17:25:45.539Z" },
+]
+
+[[package]]
 name = "langchain-ollama"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -905,6 +929,7 @@ dependencies = [
     { name = "google-genai" },
     { name = "httpx" },
     { name = "langchain-core" },
+    { name = "langchain-google-genai" },
     { name = "langchain-ollama" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -924,6 +949,7 @@ requires-dist = [
     { name = "google-genai" },
     { name = "httpx" },
     { name = "langchain-core", specifier = ">=1.7.3" },
+    { name = "langchain-google-genai", specifier = ">=4.4.2" },
     { name = "langchain-ollama", specifier = ">=1.1.0" },
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv" },

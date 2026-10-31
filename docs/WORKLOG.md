@@ -88,3 +88,4 @@
 - Ollama 0.40.13 встановлено; `gemma4:12b` тягнеться (повільний wifi, ~1 год); для `gemma4:31b-cloud`
   потрібен `ollama signin` у браузері. LangChain (langchain-core, langchain-ollama) додано для оркестратора на Gemma 4.
 - **Оркестратор на Gemma 4 (LangChain)**: `agent/orchestrator.py` (тріаж intent/urgency/tone/route, ворота маршрутів у коді), інтеграція в `Session.send`, подія `triage`, `intents` у метриках, відображення у copilot; 169 тестів. Живий тріаж очікує: `gemma4:31b-cloud` дає 402 (потрібні кредити Ollama Cloud) або локальна `gemma4:12b`.
+- Оркестратор: додано `ORCHESTRATOR_PROVIDER=ollama|gemini` (Gemini API `gemma-4-31b-it` через `langchain-google-genai`), типова модель Ollama тепер `gemma4:12b`; 172 тести.

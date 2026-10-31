@@ -23,6 +23,8 @@ SYSTEM_PROMPT = """Ти — оркестратор підтримки платф
 
 Клієнт: {client_summary}
 
+Відповідай ЛИШЕ одним JSON-об'єктом, без жодного тексту до чи після нього і без markdown.
+
 Поля відповіді (СТРОГИЙ JSON, без пояснень і markdown):
 - intent: одне з reschedule, cancel, refund, question, complaint, other
 - urgency: одне з low, normal, high, urgent
@@ -94,9 +96,19 @@ class Orchestrator:
 def make_orchestrator() -> Orchestrator | None:
     if os.environ.get("ORCHESTRATOR", "on").lower() == "off":
         return None
+    provider = os.environ.get("ORCHESTRATOR_PROVIDER", "ollama").lower()
+    if provider == "gemini":
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            return None
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        model = os.environ.get("ORCHESTRATOR_MODEL", "gemma-4-31b-it")
+        chat = ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0)
+        return Orchestrator(chat, model)
     from langchain_ollama import ChatOllama
 
-    model = os.environ.get("ORCHESTRATOR_MODEL", "gemma4:31b-cloud")
+    model = os.environ.get("ORCHESTRATOR_MODEL", "gemma4:12b")
     base_url = os.environ.get("ORCHESTRATOR_BASE_URL", "http://localhost:11434")
     chat = ChatOllama(model=model, base_url=base_url, temperature=0, format="json")
     return Orchestrator(chat, model)
