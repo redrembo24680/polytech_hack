@@ -97,41 +97,54 @@ async function send(text) {
   }
 }
 
+function arr(v) { return Array.isArray(v) ? v : []; }
+function present(v) { return v !== undefined && v !== null && v !== ""; }
+
 function renderCard(c) {
+  c = c && typeof c === "object" ? c : {};
   const card = el("div", "card");
   if (c.type === "slots") {
     card.appendChild(el("h4", "", c.title || "Доступні слоти"));
     const opts = el("div", "opts");
-    (c.options || []).forEach((o) => {
-      const b = el("button", "ghost", o.label || o.start + " — " + o.staff_name);
-      b.addEventListener("click", () => send("Обираю слот " + o.start + " (" + o.staff_name + ")"));
+    arr(c.options).forEach((o) => {
+      if (!o || typeof o !== "object" || !present(o.start)) return;
+      const who = present(o.staff_name) ? o.staff_name : "";
+      const b = el("button", "ghost", o.label || (o.start + (who ? " — " + who : "")));
+      b.addEventListener("click", () => send("Обираю слот " + o.start + (who ? " (" + who + ")" : "")));
       opts.appendChild(b);
     });
     card.appendChild(opts);
   } else if (c.type === "booking_summary") {
     card.appendChild(el("h4", "", "Запис " + (c.booking_id || "")));
+    const pp = c.prepayment && typeof c.prepayment === "object"
+      ? [c.prepayment.amount !== undefined ? c.prepayment.amount + " грн" : "", c.prepayment.status || ""]
+          .filter(Boolean).join(", ")
+      : c.prepayment;
     const t = el("table");
     [["Послуга", c.service], ["Майстер", c.staff], ["Початок", c.start],
-     ["Передоплата", c.prepayment], ["Статус", c.status]].forEach(([k, v]) => {
+     ["Передоплата", pp], ["Статус", c.status]].forEach(([k, v]) => {
+      if (!present(v)) return;
       const tr = el("tr");
       tr.appendChild(el("td", "", k));
-      tr.appendChild(el("td", "", v === undefined || v === null ? "—" : String(v)));
+      tr.appendChild(el("td", "", String(v)));
       t.appendChild(tr);
     });
     card.appendChild(t);
-    if (c.timeline && c.timeline.length) {
+    const timeline = arr(c.timeline).filter((x) => x && typeof x === "object");
+    if (timeline.length) {
       const tl = el("div", "timeline");
-      c.timeline.forEach((x) => tl.appendChild(el("div", "", x.ts + " — " + x.event)));
+      timeline.forEach((x) => tl.appendChild(el("div", "", [x.ts, x.event].filter(present).join(" — "))));
       card.appendChild(tl);
     }
   } else if (c.type === "decision") {
     card.appendChild(el("h4", "", c.title || "Рішення"));
-    card.appendChild(el("div", "outcome", c.outcome || ""));
+    if (present(c.outcome)) card.appendChild(el("div", "outcome", String(c.outcome)));
     [["Міркування", c.reasoning], ["Виконані дії", c.actions_taken]].forEach(([h, items]) => {
-      if (!items || !items.length) return;
+      const list = arr(items).filter(present);
+      if (!list.length) return;
       card.appendChild(el("div", "muted", h));
       const ul = el("ul");
-      items.forEach((i) => ul.appendChild(el("li", "", i)));
+      list.forEach((i) => ul.appendChild(el("li", "", String(i))));
       card.appendChild(ul);
     });
   } else {
@@ -166,7 +179,7 @@ function renderFeed(ev) {
     case "approval_created": row.textContent = "🕓 Запит на апрув: " + (p.tool || p.id || ""); break;
     case "approval_decided":
       row.textContent = (p.approve === false || p.status === "rejected" ? "✖ Відхилено" : "✔ Схвалено") +
-        (p.by ? " (" + p.by + ")" : "");
+        (p.decided_by ? " (" + p.decided_by + ")" : "");
       break;
     case "user_message": row.textContent = "👤 " + (p.text || ""); break;
     case "assistant_message": row.textContent = "🤖 " + (p.text || ""); break;

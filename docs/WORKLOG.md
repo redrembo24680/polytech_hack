@@ -67,3 +67,8 @@
   - Task 9 ✅ smoke-скрипт, .env.example, 10 файлів `docs/features/support-agent/`, README. Живий прогін Gemma 4 відкладено до появи `GEMINI_API_KEY`.
   - Контракт апки доповнено: `list_clients`, `list_client_bookings`.
   - Фінальне рев'ю всієї гілки `feat/agent` запущено (Opus).
+- Фікс-хвиля після фінального рев'ю гілки `feat/agent` (137 тестів):
+  - Policy/дані: повернення по активному запису лише через апрув; forfeit лише з `held` (скасування після повернення лишає `refunded`); демо-бронювання відносно старту (`hours_ahead`), `MemoryDataSource(seed, now, now_fn)`; з rules_text Lumen прибрано "субота через адміністратора" (жодні ворота цього не виражають).
+  - Tools: `agent/cards.py` (pydantic-картки, `parse_card`, Gemini-схема `card`), no-arg tools без `parameters`, `null` в optional відкидається, naive `start` → таймзона тенанта, goodwill з даних + `already_applied`, `WRITE_LOCK`; метрика `money_saved_uah` тепер читає `tool_result.result.saved_uah`.
+  - Агент/LLM: клієнт бачить запасний текст при помилці LLM / max_iter / порожній відповіді; промпт з днем тижня, прикладами карток і правилами (goodwill перед зміною, refund перед cancel, id з профілю, без null, [SYSTEM]); thought-частини пропускаються, `thought_signature` зберігається; ретраї 429/5xx; fake-провайдер відповідає завжди; 503 без ключа.
+  - Web/доки/smoke: захисний `renderCard`, `decided_by`; smoke підставляє реальний час запису, вибирає перший слот у A, схвалює апруви в B і C, без ключа → код 2.

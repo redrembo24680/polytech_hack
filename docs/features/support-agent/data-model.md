@@ -22,4 +22,4 @@
 ## Tools
 Read: `get_client_profile`, `get_booking`, `find_slots`. Write (policy gated): `reschedule_booking`, `cancel_booking`, `refund_prepayment`, `apply_goodwill_exception`, `waive_no_show_fee`, `escalate_to_human`. UI: `show_card`. Поле `by` в історії: `agent` або `human:<ім'я>`.
 
-Стан тримається в пам'яті (`MemoryDataSource`, `EventLog`, `ApprovalStore`), скидається при рестарті; seed у `agent/seed.json` з відносними датами (`day_offset` + `time` у бронюваннях, `days_ago` у винятках), перераховуються від `now` при старті.
+Стан тримається в пам'яті (`MemoryDataSource`, `EventLog`, `ApprovalStore`), скидається при рестарті; seed у `agent/seed.json` з відносними датами (`hours_ahead` — від поточної години, округленої вниз, або `day_offset` + `time` у бронюваннях; `days_ago` у винятках), перераховуються від `now` при старті.

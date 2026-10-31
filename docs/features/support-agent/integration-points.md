@@ -7,7 +7,7 @@
 ## Env-змінні
 | Змінна | Призначення | Дефолт |
 |---|---|---|
-| `AGENT_PROVIDER` | `gemini` або `fake` (`fake` = фіксована відповідь "Тестова відповідь", без tool-викликів) | `gemini` |
+| `AGENT_PROVIDER` | `gemini` або `fake` (`fake` = на кожне повідомлення фіксована відповідь "Тестова відповідь", без tool-викликів) | `gemini` |
 | `AGENT_MODEL` | модель Gemini API | `gemma-4-31b-it` |
 | `GEMINI_API_KEY` | ключ з aistudio.google.com; без нього `make_client()` кидає `RuntimeError` | немає |
 | `AGENT_SYSTEM_AS_PREFIX` | `1` = системний промпт іде префіксом у першому user-повідомленні, а не як `system_instruction` (обхід для моделей без підтримки system) | вимкнено |

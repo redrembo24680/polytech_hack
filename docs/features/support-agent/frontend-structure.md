@@ -7,8 +7,8 @@
 - `style.css` — стилі.
 
 ## Стовпці
-- Чат клієнта: повідомлення, індикатор "агент думає…", картки (`renderCard`: `slots` як кнопки, `booking_summary` таблиця, `decision` блок). Клік по слоту надсилає в чат "Обираю слот <start> (<майстер>)".
-- Copilot адміністратора: метрики тенанта, список pending-апрувів (`approvalCard`: tool, args, причина, поле нотатки, "Схвалити"/"Відхилити", `by="Адміністратор"`), стрічка подій (`renderFeed`: thinking, tool_call з бейджем рішення, tool_result, approval_*).
+- Чат клієнта: повідомлення, індикатор "агент думає…", картки (`renderCard`: `slots` як кнопки, `booking_summary` таблиця, `decision` блок; захисний: масиви перевіряються `Array.isArray`, відсутні поля пропускаються, передоплата показується як "500 грн, held"). Клік по слоту надсилає в чат "Обираю слот <start> (<майстер>)".
+- Copilot адміністратора: метрики тенанта, список pending-апрувів (`approvalCard`: tool, args, причина, поле нотатки, "Схвалити"/"Відхилити", `by="Адміністратор"`), стрічка подій (`renderFeed`: thinking, tool_call з бейджем рішення, tool_result, approval_*; у `approval_decided` ім'я з `decided_by`).
 
 ## Звернення до бекенду (функція `api`)
 `GET /tenants/{id}` (клієнти), `POST /sessions`, `POST /sessions/{sid}/messages`, `GET /sessions/{sid}/events?after=`, `GET /tenants/{id}/approvals?status=pending`, `POST /approvals/{id}/decide`, `GET /tenants/{id}/metrics`.

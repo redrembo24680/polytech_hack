@@ -27,7 +27,7 @@
   ],
   "cli": [
     {"command": "uv run uvicorn agent.main:app --port 8000", "description": "запуск API і фронту"},
-    {"command": "uv run python scripts/smoke.py --scenario A|B|C", "description": "консольний прогін демо-сценарію через Session", "exit_codes": {"0": "завершено", "1": "подія error"}},
+    {"command": "uv run python scripts/smoke.py --scenario A|B|C", "description": "консольний прогін демо-сценарію через Session", "exit_codes": {"0": "завершено", "1": "подія error", "2": "немає GEMINI_API_KEY"}},
     {"command": "uv run pytest -q", "description": "тести без мережі"}
   ]
 }
