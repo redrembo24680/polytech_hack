@@ -86,7 +86,10 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
         lookup(ds.get_client, body.tenant_id, body.client_id)
         with st.guard:
             if st.llm is None:
-                st.llm = make_client()
+                try:
+                    st.llm = make_client()
+                except RuntimeError as e:
+                    raise ApiError(503, "llm_unavailable", str(e)) from None
             st.counter += 1
             sid = f"s-{st.counter}"
         st.sessions[sid] = Session(sid, body.tenant_id, body.client_id, body.channel, ds,

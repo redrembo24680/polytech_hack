@@ -171,3 +171,16 @@ def test_default_datasource_uses_live_clock():
     clock["now"] = NOW + timedelta(days=1, hours=1)
     b = ds.cancel("lumen", "b-max-1", "x", "agent", False)
     assert b.history[-1].ts == clock["now"]
+
+
+def test_create_session_without_llm_key_is_503(monkeypatch):
+    import agent.main as m
+
+    def no_key():
+        raise RuntimeError("Не задано GEMINI_API_KEY")
+
+    monkeypatch.setattr(m, "make_client", no_key)
+    c = TestClient(create_app(ds=MemoryDataSource.from_file(SEED_PATH, NOW), now_fn=lambda: NOW))
+    r = c.post("/sessions", json={"tenant_id": "lumen", "client_id": "max", "channel": "chat"})
+    assert r.status_code == 503
+    assert r.json() == {"error": "llm_unavailable", "message": "Не задано GEMINI_API_KEY"}
