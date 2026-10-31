@@ -242,3 +242,12 @@ def test_decide_on_voice_session_sends_sms_without_llm():
     assert r.status_code == 200 and r.json()["reply"].startswith("Адміністратор схвалив виняток з доброї волі.")
     assert any(m.channel == "sms" and m.text == r.json()["reply"] for m in ds._messages)
     assert c.app.state.llm.calls == []
+
+
+def test_decide_web_session_reply_has_no_card_text():
+    slots = {"type": "slots", "title": "Вільні слоти", "options": [
+        {"id": "1", "start": "2026-11-03T13:00:00+02:00", "staff_id": "st-maria", "staff_name": "Марія", "label": "x"}]}
+    c, _, ap = _pending([Msg("model", [CallPart("show_card", {"card": slots})]),
+                         Msg("model", [TextPart("Оберіть час.")])])
+    r = c.post(f"/approvals/{ap['id']}/decide", json={"approve": True, "note": None, "by": "Оля"})
+    assert r.json()["reply"] == "Оберіть час."

@@ -128,3 +128,13 @@ def test_vapi_setup_includes_identify_caller():
     from agent.voice import voice_registry
     names = [d["name"] for d in voice_registry([]).declarations()]
     assert "identify_caller" in names
+
+
+def test_empty_call_id_gets_distinct_anon_sessions():
+    c, _ = make()
+    for _ in range(2):
+        b = body("", "get_client_profile")
+        b["message"]["call"] = {"customer": {}}
+        c.post("/voice/tools", json=b)
+    keys = list(c.app.state.sessions)
+    assert len(keys) == 2 and all(k.startswith("voice:lumen:call:anon-") for k in keys)

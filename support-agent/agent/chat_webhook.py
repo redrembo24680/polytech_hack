@@ -52,7 +52,7 @@ def _handle(app, tenant_id: str, body: dict) -> str:
     if client is None:
         return ASK_PHONE_TEXT
     conv = body.get("conversation_id") or ""
-    key = f'chat:{tenant_id}:{conv}'
+    key = f'chat:{tenant_id}:{conv}' if conv else f'chat:{tenant_id}:client:{client.id}'
     session = get_or_create_session(app, key, tenant_id, client.id, "chat")
     session.meta.update({"conversation_id": conv,
                          "site_base_url": os.environ.get("APP_API_URL", "")})

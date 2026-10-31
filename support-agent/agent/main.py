@@ -155,8 +155,9 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
                                    {**approval.model_dump(mode="json"), "result": result})
                 else:
                     reply = session.resume_after_approval(approval, result)
-                    cards = [card_to_text(e.payload) for e in st.events.since(session.id, last_id) if e.type == "card"]
-                    reply = "\n\n".join(([reply] if reply else []) + cards)
+                    if session.channel == "chat" and session.meta.get("conversation_id"):  # site-chat delivery; web UI renders card events
+                        cards = [card_to_text(e.payload) for e in st.events.since(session.id, last_id) if e.type == "card"]
+                        reply = "\n\n".join(([reply] if reply else []) + cards)
                 deliver_reply(session, reply, getattr(st, "reply_transport", None))
                 return result, reply, None
             except Exception as e:

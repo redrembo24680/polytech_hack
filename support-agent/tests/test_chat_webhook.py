@@ -135,3 +135,13 @@ def test_resume_cards_reach_site_chat():
     r = c.post(f"/approvals/{ap[0].id}/decide", json={"approve": True, "by": "admin"})
     assert r.status_code == 200
     assert "Готово!" in posted[0]["text"] and "Рішення по запису" in posted[0]["text"]
+
+
+def test_no_conversation_id_sessions_are_per_client():
+    c, _ = make([Msg("model", [TextPart("a")]), Msg("model", [TextPart("b")])])
+    c.post("/chat", json=body("привіт", client_id="olena", conv=""))
+    c.post("/chat", json=body("привіт", client_id="max", conv=""))
+    st = c.app.state
+    assert sorted(st.sessions) == ["chat:lumen:client:max", "chat:lumen:client:olena"]
+    for k in st.sessions:
+        assert [e.type for e in st.events.since(k)].count("user_message") == 1

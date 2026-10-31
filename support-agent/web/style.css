@@ -68,6 +68,7 @@ h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:700;line-height:1.5;letter-spacing:.02em;color:#fff;background:var(--grey);vertical-align:middle}
 .b-allow{background:var(--green)}
 .b-needs_approval{background:var(--amber);color:#1a1a1a}
+.b-blocked{background:#5a3d00;color:#ffd27a}
 .b-forbidden,.b-error{background:var(--red)}
 .b-read{background:var(--grey)}
 .b-noop{background:#3f4655}

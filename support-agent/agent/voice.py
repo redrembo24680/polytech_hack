@@ -3,6 +3,7 @@ import json
 import os
 import re
 import threading
+import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -91,6 +92,7 @@ def _session_for(app, tenant: str, client) -> Session:
 
 def run_tool(app, tenant: str, phone: str, name: str, args: dict, call_id: str = "") -> str:
     st = app.state
+    unbound_key = f"voice:{tenant}:call:{call_id or 'anon-' + uuid.uuid4().hex[:8]}"
     if normalize_phone(phone):
         try:
             clients = st.ds.find_client_by_phone(tenant, normalize_phone(phone))
@@ -99,9 +101,9 @@ def run_tool(app, tenant: str, phone: str, name: str, args: dict, call_id: str =
         if clients:
             session = _session_for(app, tenant, clients[0])
         else:  # номер дзвінка невідомий у даних: незв'язана сесія, клієнт назве номер через identify_caller
-            session = _new_session(app, f"voice:{tenant}:call:{call_id}", tenant, None, None)
+            session = _new_session(app, unbound_key, tenant, None, None)
     else:  # веб-дзвінок без номера: сесія за call.id, лише identify_caller до прив'язки
-        session = _new_session(app, f"voice:{tenant}:call:{call_id}", tenant, None, None)
+        session = _new_session(app, unbound_key, tenant, None, None)
     with st.locks[session.id]:
         if session.client_id is None and name != "identify_caller":
             return ASK_PHONE_FIRST
