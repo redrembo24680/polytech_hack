@@ -62,3 +62,4 @@
   - Task 6 ✅ agent loop + системний промпт + Session + execute_approved (83 тестів). Фікс: перевірка статусу апруву, never-raises.
   - Task 7 ✅ FastAPI: sessions, messages, events, approvals/decide, metrics, static web (96 тестів). Фікс: виконання апруву під локом сесії, плоскі помилки, контракт при збої після виконання.
   - Відкрито: dev-залежність `httpx2` (прибирає попередження Starlette у тестах) — інсталяцію субагенту заблокував permission-класифікатор; рішення за користувачем (`uv add --dev httpx2`).
+- Task 9: smoke script, feature docs, README; live run: pending key
