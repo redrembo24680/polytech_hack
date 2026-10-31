@@ -1,0 +1,9 @@
+{
+  "GET /b/[tenant]/support": "app/web/app/b/[tenant]/support/page.tsx:SupportPage",
+  "POST /api/tenants/{tenant_id}/support/conversations": "app/backend/booking/routers/support.py:create_conversation",
+  "GET /api/tenants/{tenant_id}/support/conversations/{id}/messages": "app/backend/booking/routers/support.py:list_messages",
+  "POST /api/tenants/{tenant_id}/support/conversations/{id}/messages": "app/backend/booking/routers/support.py:post_client_message",
+  "POST /api/tenants/{tenant_id}/support/conversations/{id}/reply": "app/backend/booking/routers/support.py:reply",
+  "POST {AGENT_URL}/chat (outgoing webhook)": "app/backend/booking/services/chat.py:forward_to_agent",
+  "POST /chat (test echo agent)": "app/backend/scripts/echo_agent.py:chat"
+}

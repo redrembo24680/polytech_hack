@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: booking
+      POSTGRES_DB: booking
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./app/backend/docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./app/backend
+    command: ["uvicorn", "booking.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://booking:booking@db:5432/booking
+      AGENT_URL: ${AGENT_URL:-}
+      AGENT_TIMEOUT: ${AGENT_TIMEOUT:-60}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./app/backend/booking:/app/booking
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mcp:
+    build: ./app/mcp
+    environment:
+      APP_API_URL: http://backend:8001
+      MCP_TRANSPORT: http
+    ports:
+      - "8002:8002"
+    depends_on:
+      - backend
+
+  web:
+    build: ./app/web
+    command: sh -c "[ -d node_modules/next ] || npm ci; npm run dev -- -H 0.0.0.0 -p 3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8001
+      INTERNAL_API_URL: http://backend:8001
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./app/web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

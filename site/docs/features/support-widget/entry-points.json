@@ -1,0 +1,6 @@
+{
+  "GET /widget.js": "app/web/public/widget.js",
+  "GET /demo-salon-site.html": "app/web/public/demo-salon-site.html",
+  "window.BooklyWidget": "app/web/public/widget.js:open/close",
+  "GET /b/[tenant]/support?embed=1": "app/web/app/b/[tenant]/support/page.tsx:SupportPage"
+}
