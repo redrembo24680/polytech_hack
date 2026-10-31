@@ -64,6 +64,9 @@ def test_serializers(session):
     for k in ("prepayment", "no_show_fee", "history", "client", "staff", "service"):
         assert k in bo
     assert bo["start"].endswith("+02:00")
+    assert bo["client"]["visits_count"] == 1 and bo["client"]["no_show_count"] == 1
+    assert bo["client"]["tenant_id"] == "t-test" and len(bo["client"]["goodwill_exceptions"]) == 1
+    assert "notes" in bo["client"]
     assert bo["prepayment"] == {"amount": 0, "status": "none"}
     assert bo["history"][0]["event"] == "created" and bo["history"][0]["by"] == "agent"
     assert "client" not in booking_out(b1, expand=False)

@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 
 from booking.models import Booking, Client
 
@@ -99,9 +100,7 @@ def booking_out(b, expand: bool = False) -> dict:
         "notes": b.notes,
     }
     if expand:
-        out["client"] = {
-            "id": b.client.id, "name": b.client.name, "phone": b.client.phone,
-        }
+        out["client"] = client_out(b.client, object_session(b), with_bookings=False)
         out["staff"] = staff_out(b.staff)
         out["service"] = service_out(b.service)
     return out
