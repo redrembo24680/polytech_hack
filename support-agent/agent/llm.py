@@ -279,7 +279,7 @@ class AnthropicClient:
         if client is None:
             import anthropic
 
-            client = anthropic.Anthropic(api_key=api_key)
+            client = anthropic.Anthropic(api_key=api_key, timeout=60.0, max_retries=1)
         self._client = client
 
     @staticmethod

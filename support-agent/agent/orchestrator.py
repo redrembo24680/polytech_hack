@@ -117,8 +117,7 @@ class Answerer:
     def answer(self, question: str, tenant_facts: str, client_summary: str) -> str | None:
         try:
             out = self._chain.invoke({"question": question, "tenant_facts": tenant_facts,
-                                      "client_summary": client_summary},
-                                     config={"timeout": self.timeout_s})
+                                      "client_summary": client_summary})
             return str(out).strip() or None
         except Exception:
             return None
@@ -133,8 +132,7 @@ class Orchestrator:
     def triage(self, text: str, tenant_rules: str, client_summary: str) -> Triage | None:
         try:
             data = self._chain.invoke({"text": text, "tenant_rules": tenant_rules,
-                                       "client_summary": client_summary},
-                                      config={"timeout": self.timeout_s})
+                                       "client_summary": client_summary})
             intent, urgency = data["intent"], data["urgency"]
             route = data["route"]
             emotion = data.get("emotion")
@@ -169,13 +167,14 @@ def _make_answerer() -> Answerer | None:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         model = os.environ.get("ANSWERER_MODEL", "gemma-4-31b-it")
-        return Answerer(ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0), model)
+        return Answerer(ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0,
+                                     timeout=20, max_retries=1), model)
     from langchain_ollama import ChatOllama
 
     model = os.environ.get("ANSWERER_MODEL", "gemma4:12b")
     base_url = os.environ.get("ANSWERER_BASE_URL", "http://localhost:11434")
     return Answerer(ChatOllama(model=model, base_url=base_url, temperature=0, reasoning=False,
-                               num_predict=384), model)
+                               num_predict=384, client_kwargs={"timeout": 30}), model)
 
 
 def make_orchestrator() -> Orchestrator | None:
@@ -189,13 +188,15 @@ def make_orchestrator() -> Orchestrator | None:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         model = os.environ.get("ORCHESTRATOR_MODEL", "gemma-4-31b-it")
-        chat = ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0)
+        chat = ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0,
+                                     timeout=20, max_retries=1)
     elif provider == "ollama":
         from langchain_ollama import ChatOllama
 
         model = os.environ.get("ORCHESTRATOR_MODEL", "gemma4:12b")
         base_url = os.environ.get("ORCHESTRATOR_BASE_URL", "http://localhost:11434")
-        chat = ChatOllama(model=model, base_url=base_url, temperature=0, format="json")
+        chat = ChatOllama(model=model, base_url=base_url, temperature=0, format="json",
+                          client_kwargs={"timeout": 30})
     else:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -203,5 +204,5 @@ def make_orchestrator() -> Orchestrator | None:
         from langchain_anthropic import ChatAnthropic
 
         model = os.environ.get("ORCHESTRATOR_MODEL", "claude-sonnet-5-5")
-        chat = ChatAnthropic(model=model, api_key=api_key, max_tokens=512)
+        chat = ChatAnthropic(model=model, api_key=api_key, max_tokens=512, timeout=20, max_retries=1)
     return Orchestrator(chat, model, _make_answerer())

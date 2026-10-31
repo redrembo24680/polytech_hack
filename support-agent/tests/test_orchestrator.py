@@ -203,3 +203,32 @@ def test_answerer_prompt_contains_facts_block():
     Answerer(Spy(responses=["x"]), "g").answer("години?", "Години роботи: Пн–Сб 10:00–19:00", "клієнт")
     assert "Години роботи: Пн–Сб 10:00–19:00" in seen["p"]
     assert "не вигадуй" in seen["p"]
+
+
+def test_chat_models_get_timeouts(monkeypatch):
+    from langchain_anthropic import ChatAnthropic
+
+    monkeypatch.setenv("ORCHESTRATOR", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.delenv("ORCHESTRATOR_PROVIDER", raising=False)
+    chat = _chat_of(make_orchestrator())
+    assert isinstance(chat, ChatAnthropic) and chat.default_request_timeout == 20 and chat.max_retries == 1
+    monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "ollama")
+    o = make_orchestrator()
+    assert _chat_of(o).client_kwargs == {"timeout": 30}
+    assert o.answerer._chain.steps[1].client_kwargs == {"timeout": 30}
+    monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    chat = _chat_of(make_orchestrator())
+    assert chat.timeout == 20 and chat.max_retries == 1
+
+
+def test_worker_anthropic_client_has_timeout(monkeypatch):
+    import anthropic
+
+    seen = {}
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: seen.update(kw))
+    from agent.llm import AnthropicClient
+
+    AnthropicClient("m", "k")
+    assert seen == {"api_key": "k", "timeout": 60.0, "max_retries": 1}
