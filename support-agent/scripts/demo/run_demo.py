@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -158,7 +159,7 @@ def open_admin_site(page: Page, site: str, sc: dict) -> None:
 
 def approve_site(adm: Page, tool: str, note: str | None, cust: Page) -> int:
     label = TOOL_LABELS.get(tool, tool)
-    card = adm.locator("li").filter(has_text=label).first
+    card = adm.locator("li").filter(has_text=label).last
     try:
         card.wait_for(timeout=REPLY_TIMEOUT)
     except PWTimeout:
@@ -221,6 +222,17 @@ def sms_code(cust: Page, agent: str, sc: dict, fallback: str) -> str:
     return fallback
 
 
+def trim_start(webm) -> float:
+    """Секунда, з якої різати початок: прибираємо статичний вступ (freezedetect)."""
+    r = subprocess.run(["ffmpeg", "-i", str(webm), "-vf", "freezedetect=n=0.003:d=1", "-an", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    starts = [float(x) for x in re.findall(r"freeze_start: ([0-9.]+)", r.stderr)]
+    ends = [float(x) for x in re.findall(r"freeze_end: ([0-9.]+)", r.stderr)]
+    if starts and ends and starts[0] <= 0.5:
+        return max(0.0, ends[0] - 0.5)
+    return 0.0
+
+
 def run_scene(scene: str, args, browser) -> None:
     sc = dict(SCENES[scene])
     if scene == "A" and args.slang:
@@ -272,7 +284,10 @@ def run_scene(scene: str, args, browser) -> None:
                 wait_reply(cust, base, "повідомлення агента після апруву")
             elif scene == "C":
                 base = appr("refund_prepayment", None)
-                wait_reply(cust, base, "повідомлення агента після апруву повернення")
+                try:  # агент може одразу попросити другий апрув без проміжної репліки
+                    wait_reply(cust, base, "повідомлення агента після апруву повернення", timeout=40_000)
+                except DemoError:
+                    log("    після повернення без проміжної репліки; переходимо до апруву скасування")
                 base = appr("cancel_booking", None)
                 wait_reply(cust, base, "фінальне підтвердження скасування", contains="скасован")
             log(f"[{scene}] сцену записано")
@@ -299,8 +314,11 @@ def run_scene(scene: str, args, browser) -> None:
             log(f"    {dst}")
             if args.mp4:
                 mp4 = dst.with_suffix(".mp4")
-                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(dst), "-crf", "26", str(mp4)], check=False)
-                log(f"    {mp4}")
+                cut = trim_start(dst)
+                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{cut:.2f}", "-i", str(dst),
+                                "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+                                "-movflags", "+faststart", str(mp4)], check=False)
+                log(f"    {mp4} (різ з {cut:.1f} с)")
         shutil.rmtree(out / ".tmp", ignore_errors=True)
 
 
