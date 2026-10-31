@@ -206,6 +206,7 @@ function renderFeed(ev) {
       break;
     case "user_message": row.textContent = "👤 " + (p.text || ""); break;
     case "assistant_message": row.textContent = "🤖 " + (p.text || ""); break;
+    case "sms": row.textContent = "📲 SMS → " + (p.to || "") + ": " + (p.text || p.code || ""); break;
     case "card": row.textContent = "🃏 картка: " + (p.type || ""); break;
     default: row.textContent = ev.type + " " + compact(p);
   }

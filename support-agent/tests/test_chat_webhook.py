@@ -145,3 +145,59 @@ def test_no_conversation_id_sessions_are_per_client():
     assert sorted(st.sessions) == ["chat:lumen:client:max", "chat:lumen:client:olena"]
     for k in st.sessions:
         assert [e.type for e in st.events.since(k)].count("user_message") == 1
+
+
+# --- SMS-підтвердження (VERIFY_PHONE=1) ---
+
+def _otp_client(monkeypatch, script):
+    monkeypatch.setenv("VERIFY_PHONE", "1")
+    return make(script)
+
+
+def _sms(c):
+    return [e for e in c.app.state.events.since("chat:lumen:c1") if e.type == "sms"]
+
+
+def test_otp_first_message_asks_code_without_llm(monkeypatch):
+    c, fake = _otp_client(monkeypatch, [])
+    reply = c.post("/chat", json=body("дитина захворіла")).json()["reply"]
+    assert "SMS" in reply and "•••" in reply and fake.calls == []
+    ev = _sms(c)
+    assert len(ev) == 1 and len(ev[0].payload["code"]) == 4 and ev[0].payload["code"].isdigit()
+    msgs = c.app.state.ds._messages
+    assert [m.channel for m in msgs] == ["sms"] and ev[0].payload["code"] in msgs[0].text
+
+
+def test_otp_correct_code_processes_pending_text(monkeypatch):
+    c, fake = _otp_client(monkeypatch, [Msg("model", [TextPart("Знайшов слоти.")])])
+    c.post("/chat", json=body("дитина захворіла"))
+    code = _sms(c)[0].payload["code"]
+    reply = c.post("/chat", json=body(f"код {code}")).json()["reply"]
+    assert "підтверджено" in reply and "Знайшов слоти." in reply
+    assert len(fake.calls) == 1
+    users = [e.payload["text"] for e in c.app.state.events.since("chat:lumen:c1") if e.type == "user_message"]
+    assert users == ["дитина захворіла"]
+    assert c.post("/chat", json=body("ще")).json()["reply"] == "…"
+
+
+def test_otp_wrong_codes_resend_then_ticket(monkeypatch):
+    monkeypatch.setenv("VERIFY_PHONE_DEMO_CODE", "1234")
+    c, fake = _otp_client(monkeypatch, [])
+    c.post("/chat", json=body("привіт"))
+    for _ in range(2):
+        assert c.post("/chat", json=body("0000")).json()["reply"] == "Код не збігається. Спробуйте ще раз."
+    assert "новий код" in c.post("/chat", json=body("0000")).json()["reply"]
+    assert len(_sms(c)) == 2
+    for _ in range(2):
+        c.post("/chat", json=body("1111"))
+    last = c.post("/chat", json=body("2222")).json()["reply"]
+    assert "Адміністратор" in last and fake.calls == []
+    assert len(c.app.state.ds._tickets) == 1
+
+
+def test_otp_non_code_reminds_and_keeps_latest_text(monkeypatch):
+    c, fake = _otp_client(monkeypatch, [])
+    c.post("/chat", json=body("перше"))
+    reply = c.post("/chat", json=body("друге повідомлення")).json()["reply"]
+    assert "код" in reply and fake.calls == []
+    assert c.app.state.sessions["chat:lumen:c1"].meta["pending_text"] == "друге повідомлення"

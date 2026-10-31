@@ -16,6 +16,7 @@ EventType = Literal[
     "approval_created",
     "approval_decided",
     "triage",
+    "sms",
     "error",
 ]
 

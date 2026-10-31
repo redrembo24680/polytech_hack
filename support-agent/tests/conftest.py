@@ -103,3 +103,10 @@ def sess_factory():
 def _no_real_orchestrator(monkeypatch):
     """Tests never talk to a real Gemma: create_app's default make_orchestrator() must return None."""
     monkeypatch.setenv("ORCHESTRATOR", "off")
+
+
+@pytest.fixture(autouse=True)
+def _no_phone_verification(monkeypatch):
+    """Existing tests run without SMS verification; OTP tests opt in with VERIFY_PHONE=1."""
+    monkeypatch.setenv("VERIFY_PHONE", "0")
+    monkeypatch.delenv("VERIFY_PHONE_DEMO_CODE", raising=False)

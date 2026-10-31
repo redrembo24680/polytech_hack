@@ -103,3 +103,4 @@
 - Фінальне рев'ю №2 (Opus) + хвиля фіксів: таймаути LLM, картки після апруву в чат сайту, блок reschedule до
   рішення по goodwill, захист voice-сесій, `load_dotenv`, ручний voice-роут за прапорцем. 246 тестів.
 - Документи: `docs/DEMO.md`, `docs/PITCH.md`, `docs/USE-CASES.md`, `docs/features/support-agent/voice-setup.md`.
+- SMS-підтвердження (симуляція OTP) у чаті сайту: `VERIFY_PHONE`, `VERIFY_PHONE_DEMO_CODE`, подія `sms`, 250 тестів.
