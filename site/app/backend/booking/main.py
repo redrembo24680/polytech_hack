@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from booking.config import settings
+import booking.models  # noqa: F401  (register tables)
 from booking.errors import register_error_handlers
 
 

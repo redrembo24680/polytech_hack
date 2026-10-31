@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from booking import clock
+import booking.models  # noqa: F401  (register tables)
 from booking.db import Base, get_session
 from booking.main import create_app
 
