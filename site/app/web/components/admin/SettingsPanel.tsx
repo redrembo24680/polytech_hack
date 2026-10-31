@@ -18,6 +18,7 @@ export function SettingsPanel({ tenant }: { tenant: string }) {
       <BusinessForm tenant={tenant} data={data} onSaved={() => mutate()} />
       <PolicyForm
         tenant={tenant}
+        key={JSON.stringify(data.policy)}
         policy={data.policy}
         onSaved={() => void mutate()}
       />
@@ -42,7 +43,7 @@ function BusinessForm({
     description: data.description,
     address: data.address,
     phone: data.phone,
-    instagram: data.instagram,
+    instagram: data.instagram ?? "",
   });
   const [saving, setSaving] = useState(false);
   const set =

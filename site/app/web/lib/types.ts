@@ -37,7 +37,7 @@ export interface Tenant {
   description: string;
   address: string;
   phone: string;
-  instagram: string;
+  instagram: string | null;
   policy: Policy;
 }
 

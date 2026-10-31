@@ -39,7 +39,8 @@ function merge(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
 export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean }) {
   const base = `/api/tenants/${tenant}/support/conversations`;
 
-  const [phase, setPhase] = useState<"loading" | "form" | "chat">("loading");
+  const [phase, setPhase] = useState<"loading" | "form" | "chat" | "retry">("loading");
+  const [attempt, setAttempt] = useState(0);
   const [convId, setConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Optimistic client messages awaiting the POST response; rendered after server messages.
@@ -66,6 +67,7 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setPhase("loading");
       const id = readStored(tenant);
       if (!id) {
         setPhase("form");
@@ -81,17 +83,14 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
         setPhase("chat");
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof ApiError && (e.status === 404 || e.code === "closed")) reset();
-        else {
-          setError("Не вдалося завантажити розмову");
-          setPhase("form");
-        }
+        if (e instanceof ApiError && (e.status === 404 || e.status === 405 || e.code === "closed")) reset();
+        else setPhase("retry");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [tenant, base, reset]);
+  }, [tenant, base, reset, attempt]);
 
   useEffect(() => {
     lastTs.current = messages.length ? messages[messages.length - 1].ts : null;
@@ -207,6 +206,14 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
       </div>
 
       {phase === "loading" && <div className="flex-1" />}
+      {phase === "retry" && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+          <p className="text-sm text-red-600">Не вдалося завантажити розмову</p>
+          <Button size="sm" onClick={() => setAttempt((n) => n + 1)}>
+            Спробувати ще
+          </Button>
+        </div>
+      )}
       {phase === "form" && <StartForm onStart={start} busy={starting} error={error} />}
       {phase === "chat" && (
         <>

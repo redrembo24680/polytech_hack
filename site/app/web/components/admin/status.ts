@@ -55,6 +55,7 @@ export const EVENT_LABEL: Record<string, string> = {
 export function byLabel(by: string): string {
   if (by === "agent") return "AI-агент";
   if (by === "human:admin") return "Адміністратор";
+  if (by === "human:client") return "Клієнт (сайт)";
   return by.startsWith("human:") ? by.slice(6) : by;
 }
 

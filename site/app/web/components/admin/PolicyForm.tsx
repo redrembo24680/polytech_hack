@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { AgentPermissions, Policy } from "@/lib/types";
+import type { AgentPermissions, Policy, Tenant } from "@/lib/types";
 import { policyToText } from "@/lib/policy-text";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -56,9 +56,9 @@ export function PolicyForm({
     e.preventDefault();
     setSaving(true);
     try {
-      const saved = await api.put<Policy>(`/api/tenants/${tenant}/policy`, p);
-      setP(saved);
-      onSaved?.(saved);
+      const t = await api.put<Tenant>(`/api/tenants/${tenant}/policy`, p);
+      setP(t.policy);
+      onSaved?.(t.policy);
       toast.success("Політику збережено");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Не вдалося зберегти");
