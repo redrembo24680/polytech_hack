@@ -57,3 +57,6 @@
   - Task 1 ✅ models + seed.json + MemoryDataSource (19 тестів). Фікс: укр. повідомлення помилок, валідація reschedule.
   - Task 2 ✅ permission engine `policy.py` (40 тестів). Фікс: refund без суми → апрув, невідомий режим → ValueError (fail-closed).
   - Task 3 ✅ EventLog / ApprovalStore / metrics (46 тестів). Фікс: locks для threadpool.
+  - Task 4 ✅ tools з policy gating (69 тестів). Фікс: перевірка власника бронювання, валідація аргументів per-tool, registry ніколи не кидає.
+  - Task 5 ✅ LLM-адаптер: GeminiClient (google-genai 2.34) + FakeClient (74 тестів), без правок.
+  - Task 6 ✅ agent loop + системний промпт + Session + execute_approved (83 тестів). Фікс: перевірка статусу апруву, never-raises.
