@@ -110,7 +110,7 @@ def wait_reply(page: Page, base: int, what: str = "відповідь агент
     return last
 
 
-def open_customer(page: Page, site: str, sc: dict) -> None:
+def open_customer(page: Page, site: str, sc: dict, otp: str = "1234") -> None:
     page.goto(f"{site}/b/{sc['tenant']}/support")
     page.evaluate("localStorage.clear()")
     page.reload()
@@ -119,6 +119,15 @@ def open_customer(page: Page, site: str, sc: dict) -> None:
         type_human(page, page.get_by_label("Ім'я"), sc["name"])
         type_human(page, page.get_by_label("Телефон"), sc["phone"])
         page.get_by_role("button", name="Почати чат").click()
+        code_input = page.get_by_label("Код з SMS")
+        try:
+            code_input.wait_for(timeout=5_000)  # крок SMS-коду у стартовій формі сайту
+            page.wait_for_timeout(1500)
+            type_human(page, code_input, otp)
+            page.wait_for_timeout(800)
+            page.get_by_role("button", name="Підтвердити").click()
+        except PWTimeout:
+            pass  # кроку коду немає (невідомий номер або вимкнено)
         page.locator("textarea[aria-label='Повідомлення']").wait_for(timeout=15_000)
     except PWTimeout:
         raise DemoError("Не вдалося відкрити чат підтримки на сайті (форма імені/телефону)") from None
@@ -236,7 +245,7 @@ def run_scene(scene: str, args, browser) -> None:
                 open_admin_site(cop, args.site, sc)
             else:
                 open_copilot(cop, args.agent, sc)
-            open_customer(cust, args.site, sc)
+            open_customer(cust, args.site, sc, args.otp)
             base = send_message(cust, sc["msg"])
             deadline = time.time() + 30
             while not site_admin:  # сесія агента з'являється після першого повідомлення

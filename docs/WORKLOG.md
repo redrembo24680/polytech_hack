@@ -109,3 +109,4 @@
 - Панель "Погодження дій агента" в адмінці сайту (`site/app/web/components/admin/AgentApprovals.tsx`): адміністратор
   схвалює/відхиляє всередині продукту; перевірено наживо Playwright-сценами B і C. Copilot лишається для розробників.
 - Фінальні демо-відео (клієнт + адмінка сайту, з SMS-кроком) у `docs/demo-videos/`; скрипт `scripts/demo/run_demo.py --scene ALL --admin site --mp4`.
+- SMS-підтвердження перенесено зі сторони агента у стартову форму чату сайту (`OtpStep.tsx`, `NEXT_PUBLIC_SMS_DEMO_CODE`, `verified=1` у localStorage); агент демо запускається з `VERIFY_PHONE=0`; `run_demo.py` вводить код після «Почати чат».
