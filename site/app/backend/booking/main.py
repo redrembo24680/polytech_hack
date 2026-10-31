@@ -35,7 +35,7 @@ def create_app(init_db: bool = True) -> FastAPI:
     register_error_handlers(app)
 
     from booking.routers import (actions, admin, bookings, clients, messages_tickets, services,
-                                 slots, staff, tenants)
+                                 slots, staff, support, tenants)
     app.include_router(admin.router)
     app.include_router(tenants.router)
     app.include_router(staff.router)
@@ -45,6 +45,7 @@ def create_app(init_db: bool = True) -> FastAPI:
     app.include_router(bookings.router)
     app.include_router(actions.router)
     app.include_router(messages_tickets.router)
+    app.include_router(support.router)
 
     @app.get("/api/health")
     def health():

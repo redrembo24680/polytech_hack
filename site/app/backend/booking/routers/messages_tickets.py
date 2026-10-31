@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from booking import clock
 from booking.db import get_session
 from booking.ids import new_id
-from booking.models import Client, OutgoingMessage, Ticket
+from booking.models import Client, Conversation, OutgoingMessage, Ticket
+from booking.services import chat
 from booking.routers.deps import get_or_404, get_tenant_or_404
 from booking.schemas import Channel, Priority, TicketStatus, message_out, ticket_out
 
@@ -35,6 +36,12 @@ def post_message(tenant_id: str, body: MessageIn, session: Session = Depends(get
     m = OutgoingMessage(id=new_id("msg"), tenant_id=tenant_id, client_id=body.client_id,
                         channel=body.channel, text=body.text, ts=clock.now())
     session.add(m)
+    if body.channel == "chat":
+        conv = session.scalars(select(Conversation).where(
+            Conversation.tenant_id == tenant_id, Conversation.client_id == body.client_id,
+            Conversation.status == "open").order_by(Conversation.created_at.desc()).limit(1)).first()
+        if conv is not None:
+            chat.add_message(session, conv, "agent", body.text)
     session.commit()
     return message_out(m)
 
