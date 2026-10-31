@@ -40,8 +40,9 @@ def build_assistant_payload(declarations: list[dict], public_url: str, tenant_id
     }
 
 
-def build_number_payload(assistant_id: str) -> dict:
-    return {"provider": "vapi", "assistantId": assistant_id}
+def build_number_payload(assistant_id: str, area_code: str = "945") -> dict:
+    # Vapi вимагає numberDesiredAreaCode для безкоштовного US-номера (400 без нього).
+    return {"provider": "vapi", "assistantId": assistant_id, "numberDesiredAreaCode": area_code}
 
 
 def _load_env() -> None:
