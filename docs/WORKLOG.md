@@ -73,3 +73,10 @@
   - Агент/LLM: клієнт бачить запасний текст при помилці LLM / max_iter / порожній відповіді; промпт з днем тижня, прикладами карток і правилами (goodwill перед зміною, refund перед cancel, id з профілю, без null, [SYSTEM]); thought-частини пропускаються, `thought_signature` зберігається; ретраї 429/5xx; fake-провайдер відповідає завжди; 503 без ключа.
   - Web/доки/smoke: захисний `renderCard`, `decided_by`; smoke підставляє реальний час запису, вибирає перший слот у A, схвалює апруви в B і C, без ключа → код 2.
 - Агент перенесено в `support-agent/` (корінь репо: support-agent/, app/, docs/).
+- Фінальне рев'ю (Opus): 4 Critical + 10 Important закрито однією хвилею фіксів (137 тестів), ре-рев'ю чистий.
+  Ключові зміни: Gemini-сумісні схеми tools, валідація карток (`agent/cards.py`), фолбек-текст
+  клієнту при помилках, таймзона для naive-часу, refund активного запису → апрув, forfeit лише
+  для held, goodwill з даних, ретраї 429/5xx, write-lock, сід відносно старту сервера (`hours_ahead`).
+- `feat/agent` злито в `main` (e5c8ec8). Структура: `support-agent/`, `app/` (тіммейт), `docs/`.
+- **Відкрито:** живий прогін Gemma 4 (потрібен `GEMINI_API_KEY` у `support-agent/.env`), dev-залежність
+  `httpx2`, stretch: HttpDataSource/McpDataSource до платформи тіммейта, голосовий webhook.
