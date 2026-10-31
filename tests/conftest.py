@@ -38,3 +38,46 @@ def ctx(tenant_id: str, client_id: str, booking_id: str | None, amount: int | No
         now=NOW,
         amount=amount,
     )
+
+
+def iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+
+def _make_ctx(tenant_id: str, client_id: str):
+    from agent.context import SessionCtx, use
+    from agent.events import ApprovalStore, EventLog
+
+    session = SessionCtx(
+        session_id="s1", tenant_id=tenant_id, client_id=client_id, now=NOW,
+        ds=_fresh_ds(), events=EventLog(), approvals=ApprovalStore(),
+    )
+    with use(session):
+        yield session
+
+
+@pytest.fixture
+def reg():
+    from agent.tools import default_registry
+
+    return default_registry()
+
+
+@pytest.fixture
+def ctx_lumen_olena():
+    yield from _make_ctx("lumen", "olena")
+
+
+@pytest.fixture
+def ctx_lumen_max():
+    yield from _make_ctx("lumen", "max")
+
+
+@pytest.fixture
+def ctx_denta_petro():
+    yield from _make_ctx("denta", "petro")
+
+
+@pytest.fixture
+def ctx_denta_anna():
+    yield from _make_ctx("denta", "anna")
