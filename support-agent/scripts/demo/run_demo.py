@@ -75,12 +75,25 @@ def send_message(page: Page, text: str) -> int:
     return base
 
 
-def wait_reply(page: Page, base: int, what: str = "відповідь агента", timeout: int = REPLY_TIMEOUT) -> str:
+def last_bubbles(page: Page, n: int = 2) -> list[str]:
+    try:
+        texts = page.locator(BUBBLE).all_inner_texts()
+    except Exception:
+        return []
+    return texts[-n:]
+
+
+def wait_reply(page: Page, base: int, what: str = "відповідь агента", timeout: int = REPLY_TIMEOUT,
+               contains: str | None = None) -> str:
     try:
         page.wait_for_function(
-            "([sel, n]) => document.querySelectorAll(sel).length > n", arg=[BUBBLE, base], timeout=timeout)
+            """([sel, n, sub]) => { const b = [...document.querySelectorAll(sel)];
+                if (b.length <= n) return false;
+                return !sub || b.slice(n).some(e => e.innerText.toLowerCase().includes(sub)); }""",
+            arg=[BUBBLE, base, contains], timeout=timeout)
     except PWTimeout:
-        raise DemoError(f"Не дочекались: {what} (таймаут {timeout // 1000} с)") from None
+        raise DemoError(f"Не дочекались: {what} (таймаут {timeout // 1000} с); "
+                        f"останні бульбашки агента: {last_bubbles(page)}") from None
     page.wait_for_timeout(2500)  # агент може надіслати кілька бульбашок поспіль
     last = page.locator(BUBBLE).last.inner_text()
     page.wait_for_timeout(3000)  # час прочитати
@@ -130,7 +143,8 @@ def attach_copilot(cop: Page, cust: Page, sc: dict) -> None:
         state.eventTimer=setInterval(pollEvents, 700); }""", key)
 
 
-def approve(cop: Page, tool: str | None, note: str | None) -> None:
+def approve(cop: Page, tool: str | None, note: str | None, cust: Page | None = None) -> int:
+    """Повертає кількість бульбашок агента на сайті безпосередньо ПЕРЕД кліком апруву."""
     sel = ".approval" if tool is None else f".approval:has(b:text-is('{tool}'))"
     card = cop.locator(sel).first
     try:
@@ -140,8 +154,10 @@ def approve(cop: Page, tool: str | None, note: str | None) -> None:
     cop.wait_for_timeout(3000)  # показати картку
     if note:
         type_human(cop, card.locator("input"), note)
+    base = agent_count(cust) if cust is not None else 0
     card.locator("button.ok").click()
     cop.wait_for_timeout(2500)
+    return base
 
 
 def run_scene(scene: str, args, browser) -> None:
@@ -181,14 +197,13 @@ def run_scene(scene: str, args, browser) -> None:
                 base = send_message(cust, "1")
                 wait_reply(cust, base, "підтвердження перенесення")
             elif scene == "B":
-                base = agent_count(cust)
-                approve(cop, "apply_goodwill_exception", "ок, один раз")
+                base = approve(cop, "apply_goodwill_exception", "ок, один раз", cust)
                 wait_reply(cust, base, "повідомлення агента після апруву")
             elif scene == "C":
-                approve(cop, "refund_prepayment", None)
-                approve(cop, "cancel_booking", None)
-                base = agent_count(cust)
-                wait_reply(cust, base, "фінальне підтвердження скасування")
+                base = approve(cop, "refund_prepayment", None, cust)
+                wait_reply(cust, base, "повідомлення агента після апруву повернення")
+                base = approve(cop, "cancel_booking", None, cust)
+                wait_reply(cust, base, "фінальне підтвердження скасування", contains="скасован")
             log(f"[{scene}] сцену записано")
         except Exception as e:
             msg = str(e) if isinstance(e, DemoError) else f"{type(e).__name__}: {e}"
