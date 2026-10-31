@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import threading
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -45,24 +46,30 @@ class EventLog:
     def __init__(self, now_fn: Callable[[], datetime] = _kyiv_now):
         self._now = now_fn
         self._events: list[Event] = []
+        self._lock = threading.Lock()
 
     def emit(self, session_id: str, tenant_id: str, type: EventType, payload: dict) -> Event:
-        event = Event(
-            id=len(self._events) + 1,
-            ts=self._now(),
-            session_id=session_id,
-            tenant_id=tenant_id,
-            type=type,
-            payload=payload,
-        )
-        self._events.append(event)
+        with self._lock:
+            event = Event(
+                id=len(self._events) + 1,
+                ts=self._now(),
+                session_id=session_id,
+                tenant_id=tenant_id,
+                type=type,
+                payload=payload,
+            )
+            self._events.append(event)
         return event
 
     def since(self, session_id: str, after_id: int = 0) -> list[Event]:
-        return [e for e in self._events if e.session_id == session_id and e.id > after_id]
+        with self._lock:
+            snapshot = list(self._events)
+        return [e for e in snapshot if e.session_id == session_id and e.id > after_id]
 
     def for_tenant(self, tenant_id: str) -> list[Event]:
-        return [e for e in self._events if e.tenant_id == tenant_id]
+        with self._lock:
+            snapshot = list(self._events)
+        return [e for e in snapshot if e.tenant_id == tenant_id]
 
 
 class Approval(BaseModel):
@@ -84,39 +91,47 @@ class ApprovalStore:
         self._now = now_fn
         self._items: dict[str, Approval] = {}
         self._counter = 0
+        self._lock = threading.Lock()
+
+    def _snapshot(self) -> list[Approval]:
+        with self._lock:
+            return list(self._items.values())
 
     def create(self, session_id: str, tenant_id: str, tool: str, args: dict, reason: str) -> Approval:
-        self._counter += 1
-        approval = Approval(
-            id=f"ap-{self._counter}",
-            session_id=session_id,
-            tenant_id=tenant_id,
-            tool=tool,
-            args=args,
-            reason=reason,
-            created_at=self._now(),
-        )
-        self._items[approval.id] = approval
+        with self._lock:
+            self._counter += 1
+            approval = Approval(
+                id=f"ap-{self._counter}",
+                session_id=session_id,
+                tenant_id=tenant_id,
+                tool=tool,
+                args=args,
+                reason=reason,
+                created_at=self._now(),
+            )
+            self._items[approval.id] = approval
         return approval
 
     def get(self, approval_id: str) -> Approval:
-        return self._items[approval_id]
+        with self._lock:
+            return self._items[approval_id]
 
     def pending(self, tenant_id: str) -> list[Approval]:
-        return [a for a in self._items.values() if a.tenant_id == tenant_id and a.status == "pending"]
+        return [a for a in self._snapshot() if a.tenant_id == tenant_id and a.status == "pending"]
 
     def for_tenant(self, tenant_id: str) -> list[Approval]:
-        return [a for a in self._items.values() if a.tenant_id == tenant_id]
+        return [a for a in self._snapshot() if a.tenant_id == tenant_id]
 
     def decide(self, approval_id: str, approve: bool, by: str, note: str | None) -> Approval:
-        approval = self.get(approval_id)
-        if approval.status != "pending":
-            raise ValueError("already_decided")
-        approval.status = "approved" if approve else "rejected"
-        approval.decided_by = by
-        approval.note = note
-        approval.decided_at = self._now()
-        return approval
+        with self._lock:
+            approval = self._items[approval_id]
+            if approval.status != "pending":
+                raise ValueError("already_decided")
+            approval.status = "approved" if approve else "rejected"
+            approval.decided_by = by
+            approval.note = note
+            approval.decided_at = self._now()
+            return approval
 
 
 def metrics(log: EventLog, approvals: ApprovalStore, tenant_id: str) -> dict:

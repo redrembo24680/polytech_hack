@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -78,3 +79,32 @@ def test_metrics_counts():
         "escalations": 1,
         "money_saved_uah": 500,
     }
+
+
+def test_emit_concurrent_ids_unique():
+    log = EventLog(now_fn=lambda: T0)
+
+    def work(i):
+        return [log.emit(f"s{i}", "t1", "user_message", {}).id for _ in range(50)]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        ids = [x for chunk in pool.map(work, range(8)) for x in chunk]
+    assert sorted(ids) == list(range(1, 401))
+    assert len(log.for_tenant("t1")) == 400
+
+
+def test_decide_concurrent_only_one_wins():
+    store = ApprovalStore(now_fn=lambda: T0)
+    store.create("s1", "t1", "refund_prepayment", {}, "r")
+
+    def work(i):
+        try:
+            store.decide("ap-1", i % 2 == 0, f"u{i}", None)
+            return "ok"
+        except ValueError as e:
+            return str(e)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(work, range(16)))
+    assert results.count("ok") == 1
+    assert results.count("already_decided") == 15
