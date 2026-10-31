@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { ChatMessage, Conversation } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -34,16 +33,17 @@ function merge(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   const ids = new Set(prev.map((m) => m.id));
   const fresh = incoming.filter((m) => !ids.has(m.id));
   if (!fresh.length) return prev;
-  return [...prev, ...fresh].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  return [...prev, ...fresh].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
 }
 
-export function SupportChat({ tenant }: { tenant: string }) {
-  const embed = useSearchParams().get("embed") === "1";
+export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean }) {
   const base = `/api/tenants/${tenant}/support/conversations`;
 
   const [phase, setPhase] = useState<"loading" | "form" | "chat">("loading");
   const [convId, setConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Optimistic client messages awaiting the POST response; rendered after server messages.
+  const [pending, setPending] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -56,6 +56,7 @@ export function SupportChat({ tenant }: { tenant: string }) {
     writeStored(tenant, null);
     setConvId(null);
     setMessages([]);
+    setPending([]);
     lastTs.current = null;
     setError(null);
     setPhase("form");
@@ -95,7 +96,7 @@ export function SupportChat({ tenant }: { tenant: string }) {
   useEffect(() => {
     lastTs.current = messages.length ? messages[messages.length - 1].ts : null;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, sending]);
+  }, [messages, pending, sending]);
 
   // Poll for asynchronously posted agent/human messages.
   useEffect(() => {
@@ -105,7 +106,21 @@ export function SupportChat({ tenant }: { tenant: string }) {
       try {
         const q = lastTs.current ? `?after=${encodeURIComponent(lastTs.current)}` : "";
         const fresh = await api.get<ChatMessage[]>(`${base}/${convId}/messages${q}`);
-        if (!stopped && fresh.length) setMessages((p) => merge(p, fresh));
+        if (stopped || !fresh.length) return;
+        setMessages((p) => merge(p, fresh));
+        // Server copy of an in-flight client message arrived: drop the temp one.
+        const texts = fresh.filter((m) => m.role === "client").map((m) => m.text);
+        if (texts.length) {
+          setPending((p) => {
+            const rest = [...texts];
+            return p.filter((m) => {
+              const i = rest.indexOf(m.text);
+              if (i < 0) return true;
+              rest.splice(i, 1);
+              return false;
+            });
+          });
+        }
       } catch (e) {
         if (e instanceof ApiError && e.status === 404 && !stopped) reset();
       }
@@ -147,12 +162,13 @@ export function SupportChat({ tenant }: { tenant: string }) {
     setText("");
     setError(null);
     setSending(true);
-    setMessages((p) => [...p, optimistic]);
+    setPending((p) => [...p, optimistic]);
     try {
       const created = await api.post<ChatMessage[]>(`${base}/${convId}/messages`, { text: value });
-      setMessages((p) => merge(p.filter((m) => m.id !== tempId), created));
+      setMessages((p) => merge(p, created));
+      setPending((p) => p.filter((m) => m.id !== tempId));
     } catch (e) {
-      setMessages((p) => p.filter((m) => m.id !== tempId));
+      setPending((p) => p.filter((m) => m.id !== tempId));
       setText(value);
       if (e instanceof ApiError && (e.status === 404 || e.status === 409)) reset();
       else setError("Не вдалося надіслати повідомлення. Спробуйте ще раз.");
@@ -195,12 +211,15 @@ export function SupportChat({ tenant }: { tenant: string }) {
       {phase === "chat" && (
         <>
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
-            {messages.length === 0 && !sending && (
+            {messages.length === 0 && pending.length === 0 && !sending && (
               <p className="py-8 text-center text-sm text-slate-400">
                 Напишіть, чим можемо допомогти
               </p>
             )}
             {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            {pending.map((m) => (
               <MessageBubble key={m.id} message={m} />
             ))}
             {sending && <TypingIndicator />}
