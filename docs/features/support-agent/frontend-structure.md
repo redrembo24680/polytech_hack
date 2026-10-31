@@ -1,6 +1,6 @@
 # Структура фронтенду
 
-`web/` — статичні файли без фреймворку, FastAPI монтує їх на `/` (`StaticFiles(html=True)`).
+`support-agent/web/` — статичні файли без фреймворку, FastAPI монтує їх на `/` (`StaticFiles(html=True)`).
 
 - `index.html` — одна сторінка: шапка (вибір тенанта `lumen`/`denta`, клієнта, кнопка "Нова сесія") і два стовпці.
 - `app.js` — уся логіка, fetch + setInterval.

@@ -32,6 +32,8 @@
 
 ## File Structure
 
+> Після реструктуризації всі шляхи нижче та в задачах відносні до `support-agent/` (напр. `agent/main.py` = `support-agent/agent/main.py`); тести й `uv` запускаються з цієї папки.
+
 ```
 pyproject.toml                 uv-проєкт, залежності, pytest config
 agent/__init__.py

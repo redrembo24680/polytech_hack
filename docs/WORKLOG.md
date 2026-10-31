@@ -72,3 +72,4 @@
   - Tools: `agent/cards.py` (pydantic-картки, `parse_card`, Gemini-схема `card`), no-arg tools без `parameters`, `null` в optional відкидається, naive `start` → таймзона тенанта, goodwill з даних + `already_applied`, `WRITE_LOCK`; метрика `money_saved_uah` тепер читає `tool_result.result.saved_uah`.
   - Агент/LLM: клієнт бачить запасний текст при помилці LLM / max_iter / порожній відповіді; промпт з днем тижня, прикладами карток і правилами (goodwill перед зміною, refund перед cancel, id з профілю, без null, [SYSTEM]); thought-частини пропускаються, `thought_signature` зберігається; ретраї 429/5xx; fake-провайдер відповідає завжди; 503 без ключа.
   - Web/доки/smoke: захисний `renderCard`, `decided_by`; smoke підставляє реальний час запису, вибирає перший слот у A, схвалює апруви в B і C, без ключа → код 2.
+- Агент перенесено в `support-agent/` (корінь репо: support-agent/, app/, docs/).

@@ -8,7 +8,7 @@
 - Агент закриває типові звернення сам у межах прав, решту готує для людини з причиною і рекомендацією.
 
 ## Правила тенанта (два шари)
-1. `agent_permissions` — жорсткі ворота, перевіряє код (`agent/policy.py`). Режими: `auto` / `approval` / `forbidden`; для refund ще `auto_under_limit` з `refund_auto_limit`.
+1. `agent_permissions` — жорсткі ворота, перевіряє код (`support-agent/agent/policy.py`). Режими: `auto` / `approval` / `forbidden`; для refund ще `auto_under_limit` з `refund_auto_limit`.
 2. `rules_text` — вільний текст власника, потрапляє в системний промпт дослівно. Він уточнює поведінку моделі, але не розширює права.
 
 Lumen Beauty (seed): reschedule і cancel `auto`; refund до 500 грн `auto`, більше через апрув; goodwill `auto` (1 виняток на клієнта за 180 днів, лише без неявок); `waive_no_show_fee` через апрув; вікно скасування 24 год, пізня зміна спалює передоплату; штраф за неявку 300 грн.

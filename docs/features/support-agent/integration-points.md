@@ -14,16 +14,16 @@
 | `APP_API_URL` | майбутнє: HTTP-контракт апки, напр. `http://localhost:8001`; у коді ще не читається | немає |
 | `APP_MCP_URL` | майбутнє: MCP апки, напр. `http://localhost:8001/mcp`; у коді ще не читається | немає |
 
-`.env` підхоплює `python-dotenv` у `make_client()`; шаблон у `.env.example`. Планований вибір DataSource: `APP_MCP_URL` -> Mcp, інакше `APP_API_URL` -> Http, інакше Memory. Зараз завжди `MemoryDataSource`.
+`.env` підхоплює `python-dotenv` у `make_client()`; шаблон у `support-agent/.env.example`. Планований вибір DataSource: `APP_MCP_URL` -> Mcp, інакше `APP_API_URL` -> Http, інакше Memory. Зараз завжди `MemoryDataSource`.
 
 ## Контракт DataSource <-> платформа
-Протокол `agent/datasource.py:DataSource` відповідає 1:1 контракту апки (спека апки, розділ 4): `get_tenant`, `get_client`, `list_clients`, `find_client_by_phone`, `list_client_bookings`, `get_booking`, `find_slots`, `reschedule`, `cancel`, `refund`, `waive_no_show`, `add_goodwill`, `send_message`, `create_ticket`.
+Протокол `support-agent/agent/datasource.py:DataSource` відповідає 1:1 контракту апки (спека апки, розділ 4): `get_tenant`, `get_client`, `list_clients`, `find_client_by_phone`, `list_client_bookings`, `get_booking`, `find_slots`, `reschedule`, `cancel`, `refund`, `waive_no_show`, `add_goodwill`, `send_message`, `create_ticket`.
 - Імена MCP-tools апки: `get_tenant`, `get_client`, `find_client_by_phone`, `get_booking`, `find_slots`, `reschedule_booking`, `cancel_booking`, `refund_prepayment`, `waive_no_show_fee`, `add_goodwill`, `send_message`, `create_ticket`.
 - Помилки апки `{"error": код, "message": ...}` з кодами `not_found`, `invalid_state`, `slot_taken`, `validation` мають перетворюватись на `DataError(code, message)`.
 - Поле `by`: `agent` або `human:<ім'я>`; `forfeit_prepayment` передає агент, апка політику не перевіряє.
 - `list_clients` і `list_client_bookings` (потрібні `GET /tenants/{id}` і `get_client_profile`) відсутні в таблиці контракту апки: це потрібно узгодити з тіммейтом (у HTTP-контракті є `GET /clients/{id}` із `bookings`, але немає списку клієнтів).
-- Seed `agent/seed.json` має збігатися з сід-даними апки (клієнти `olena`, `max`, `ira` у `lumen`; `petro`, `anna` у `denta`).
+- Seed `support-agent/agent/seed.json` має збігатися з сід-даними апки (клієнти `olena`, `max`, `ira` у `lumen`; `petro`, `anna` у `denta`).
 
 ## Інші перетини
-- Фронт `web/` викликає лише API агента (той самий origin, CORS відкритий).
+- Фронт `support-agent/web/` викликає лише API агента (той самий origin, CORS відкритий).
 - Адмінка апки може брати чергу апрувів з `GET /tenants/{id}/approvals` і метрики з `/metrics`.

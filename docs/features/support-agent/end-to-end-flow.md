@@ -1,6 +1,6 @@
 # Флоу крок за кроком
 
-1. Користувач у `web/` обирає тенанта і клієнта, натискає "Нова сесія": `POST /sessions` (`agent/main.py`, `create_session`) створює `Session` з `default_registry()` і LLM-клієнтом (`make_client()` ліниво, при першій сесії).
+1. Користувач у `support-agent/web/` обирає тенанта і клієнта, натискає "Нова сесія": `POST /sessions` (`support-agent/agent/main.py`, `create_session`) створює `Session` з `default_registry()` і LLM-клієнтом (`make_client()` ліниво, при першій сесії).
 2. Клієнт пише повідомлення: `POST /sessions/{id}/messages` бере лок сесії (зайнято: 409 `busy`) і виконує `Session.send` у threadpool.
 3. `Session.send` оновлює `now`, перебудовує системний промпт (`build_system_prompt`: політика, дозволи, профіль клієнта, час), емітить `user_message`.
 4. `run_loop` викликає `llm.generate(system, history, tool_declarations)`. Помилка LLM дає подію `error` і дружню відповідь.
@@ -13,4 +13,4 @@
 11. `finish` під локом сесії викликає `execute_approved` (DataSource з `by="human:<ім'я>"`), потім `Session.resume_after_approval` додає `[SYSTEM]`-повідомлення, емітить `approval_decided` і агент відповідає клієнту.
 12. Фронт показує відповідь, картки і оновлені метрики (`GET /tenants/{id}/metrics`).
 
-Без HTTP той самий шлях проходить `scripts/smoke.py` (сценарій B вирішує апрув сам).
+Без HTTP той самий шлях проходить `support-agent/scripts/smoke.py` (сценарій B вирішує апрув сам).

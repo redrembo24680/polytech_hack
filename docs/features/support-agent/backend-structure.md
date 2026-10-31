@@ -1,7 +1,7 @@
 # Структура бекенду
 
 ```
-agent/
+support-agent/agent/
   main.py        FastAPI: create_app(ds, llm, now_fn), ендпоінти, обробники помилок, роздача web/
   agent.py       build_system_prompt, run_loop, execute_approved, клас Session
   tools.py       ToolRegistry (валідація, policy gating, події, WRITE_LOCK), 10 tools, default_registry()
@@ -13,8 +13,8 @@ agent/
   context.py     SessionCtx (contextvar), use(ctx), get_ctx()
   llm.py         Msg/TextPart/CallPart/ResultPart, LLMClient, GeminiClient, FakeClient, make_client()
   seed.json      сід-дані: tenants lumen і denta з клієнтами, бронюваннями
-scripts/smoke.py CLI-прогін сценаріїв
-tests/           pytest
+support-agent/scripts/smoke.py CLI-прогін сценаріїв
+support-agent/tests/ pytest
 ```
 
 ## Деталі
