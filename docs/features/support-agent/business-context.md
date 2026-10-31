@@ -32,3 +32,8 @@ Lumen Beauty (seed): reschedule і cancel `auto`; refund до 500 грн `auto`,
 
 ## Критерії оцінювання хакатону
 Operational Impact, Innovation, Use of AI, Reasoning & Context Handling, Presentation & Demo. Челенджі: "Best Use of Gemma 4", "Best Open-Source AI Project".
+
+## Емоції клієнта
+- anxious/sad: коротка підтримка, потім дія. frustrated: визнати проблему без виправдань, одразу рішення. angry: коротко, без емодзі і жартів, деескалація, запропонувати людину. happy: теплий тон. calm: нейтрально-дружній.
+- Регістр: агент відповідає простою розмовною мовою, якщо клієнт пише неформально, але лайку не копіює; суми, дати й правила завжди літературною лексикою.
+- Скарга в сильному гніві (angry, 3/3) завжди передається людині (`escalate`).

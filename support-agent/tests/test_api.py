@@ -104,7 +104,7 @@ def test_metrics_shape():
     c, _ = make([])
     m = c.get("/tenants/lumen/metrics").json()
     assert set(m) == {"sessions", "messages", "tool_calls", "auto_actions", "approvals_pending",
-                      "approvals_approved", "approvals_rejected", "escalations", "intents", "money_saved_uah"}
+                      "approvals_approved", "approvals_rejected", "escalations", "intents", "emotions", "money_saved_uah"}
 
 
 def test_tenant_endpoint_lists_clients():

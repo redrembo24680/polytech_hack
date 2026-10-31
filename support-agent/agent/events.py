@@ -146,10 +146,13 @@ def metrics(log: EventLog, approvals: ApprovalStore, tenant_id: str) -> dict:
     calls = [e for e in events if e.type == "tool_call"]
     mine = approvals.for_tenant(tenant_id)
     intents: dict[str, int] = {}
+    emotions: dict[str, int] = {}
     for e in events:
         if e.type == "triage":
             key = str(e.payload.get("intent", "other"))
             intents[key] = intents.get(key, 0) + 1
+            emo = str(e.payload.get("emotion", "calm"))
+            emotions[emo] = emotions.get(emo, 0) + 1
     return {
         "sessions": len({e.session_id for e in events}),
         "messages": sum(e.type == "user_message" for e in events),
@@ -162,5 +165,6 @@ def metrics(log: EventLog, approvals: ApprovalStore, tenant_id: str) -> dict:
         "approvals_rejected": sum(a.status == "rejected" for a in mine),
         "escalations": sum(e.payload.get("name") == "escalate_to_human" for e in calls),
         "intents": intents,
+        "emotions": emotions,
         "money_saved_uah": sum(_saved_uah(e.payload) for e in events if e.type == "tool_result"),
     }

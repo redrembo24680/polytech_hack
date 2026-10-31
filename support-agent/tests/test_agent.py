@@ -268,3 +268,20 @@ def test_orchestrator_failure_runs_worker_normally(sess_factory):
     assert s.send("x") == "ок"
     assert "triage" not in [e.type for e in s.events.since(s.id)]
     assert "Підказка оркестратора" not in fake.calls[0]["system"]
+
+
+def test_system_prompt_has_language_and_emotion_sections(sess_factory):
+    s = sess_factory("lumen", "olena", FakeClient([]))
+    assert "## Мова клієнта" in s.system and "## Емоції" in s.system
+    assert "скасувати" in s.system and "frustrated" in s.system
+
+
+def test_triage_emotion_reaches_per_turn_prompt(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(intent="reschedule", emotion="frustrated", intensity=2, register="casual",
+                           normalized="Клієнт просить перенести запис на завтра")
+    s.send("блін, я не встигаю завтра")
+    system = fake.calls[0]["system"]
+    assert "Оркестратор: емоція frustrated (2/3), регістр casual" in system
+    assert "Клієнт просить перенести запис на завтра" in system

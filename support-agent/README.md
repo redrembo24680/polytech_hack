@@ -73,3 +73,6 @@ Claude Sonnet (через LangChain `ChatAnthropic`, `agent/orchestrator.py`) н
 - `agent`: звичайний цикл; підказка оркестратора потрапляє в системний промпт цього ходу.
 Дії зі зміни запису, скасування і повернення коштів завжди йдуть через `agent` (це примусово в коді, незалежно від відповіді моделі). Подія `triage` видна в copilot і в метриках (`intents`).
 Налаштування: `ORCHESTRATOR=on|off`, `ORCHESTRATOR_PROVIDER=anthropic|ollama|gemini` (за замовчуванням `anthropic`, `ORCHESTRATOR_MODEL=claude-sonnet-5-5`, потрібен `ANTHROPIC_API_KEY`, без ключа оркестратор вимкнено); відповідач: `ANSWERER=on|off`, `ANSWERER_PROVIDER=ollama|gemini` (за замовчуванням `ollama`), `ANSWERER_MODEL` (`gemma4:12b`; для `gemini` `gemma-4-31b-it`), `ANSWERER_BASE_URL`. Якщо оркестратор недоступний, він мовчки пропускається.
+
+## Емоції та говірка
+Оркестратор розпізнає емоцію клієнта (calm, anxious, sad, frustrated, angry, happy) та інтенсивність, а також розуміє суржик, галицьку говірку і чат-сленг (глосарій у `agent/lingo.py`). Агент відповідає в регістрі клієнта, але лайку не копіює; сильний гнів у скарзі передається людині. Емоції видно в copilot і в метриках.

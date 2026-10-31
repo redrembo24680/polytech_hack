@@ -78,6 +78,7 @@ def test_metrics_counts():
         "approvals_rejected": 1,
         "escalations": 1,
         "intents": {},
+        "emotions": {},
         "money_saved_uah": 500,
     }
 
@@ -125,3 +126,12 @@ def test_metrics_intents_counted_from_triage():
     log.emit("s1", "t1", "triage", {"intent": "question"})
     log.emit("s9", "t2", "triage", {"intent": "cancel"})
     assert metrics(log, ApprovalStore(now_fn=lambda: T0), "t1")["intents"] == {"refund": 2, "question": 1}
+
+
+def test_metrics_emotions_counted_from_triage():
+    log = EventLog(now_fn=lambda: T0)
+    log.emit("s1", "t1", "triage", {"intent": "refund", "emotion": "angry"})
+    log.emit("s1", "t1", "triage", {"intent": "refund", "emotion": "angry"})
+    log.emit("s1", "t1", "triage", {"intent": "question"})
+    log.emit("s9", "t2", "triage", {"emotion": "happy"})
+    assert metrics(log, ApprovalStore(now_fn=lambda: T0), "t1")["emotions"] == {"angry": 2, "calm": 1}

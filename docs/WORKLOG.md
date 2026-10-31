@@ -90,3 +90,4 @@
 - **Оркестратор на Gemma 4 (LangChain)**: `agent/orchestrator.py` (тріаж intent/urgency/tone/route, ворота маршрутів у коді), інтеграція в `Session.send`, подія `triage`, `intents` у метриках, відображення у copilot; 169 тестів. Живий тріаж очікує: `gemma4:31b-cloud` дає 402 (потрібні кредити Ollama Cloud) або локальна `gemma4:12b`.
 - Оркестратор: додано `ORCHESTRATOR_PROVIDER=ollama|gemini` (Gemini API `gemma-4-31b-it` через `langchain-google-genai`), типова модель Ollama тепер `gemma4:12b`; 172 тести.
 - Ролі змінено: оркестратор — Claude Sonnet (LangChain), Gemma 4 — відповіді на прості питання; дії — основний loop.
+- Емоції та розмовна українська: `agent/lingo.py` (глосарій, емоції, регістр), нові поля `Triage` (emotion/intensity/register/normalized), розділи "Мова клієнта" та "Емоції" у промпті воркера, `emotions` у метриках і емодзі в copilot.

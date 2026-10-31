@@ -147,3 +147,44 @@ def test_gemini_provider_without_key_disabled(monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_PROVIDER", "gemini")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert make_orchestrator() is None
+
+
+def test_new_fields_populated():
+    t = run(tri(emotion="frustrated", intensity=2, normalized="Клієнт просить перенести запис", register="casual"))
+    assert (t.emotion, t.intensity, t.normalized, t.register) == (
+        "frustrated", 2, "Клієнт просить перенести запис", "casual")
+    assert t.tone == "upset"
+    p = t.payload()
+    assert p["emotion"] == "frustrated" and p["intensity"] == 2 and p["register"] == "casual"
+    assert p["normalized"].startswith("Клієнт")
+
+
+def test_missing_new_fields_default():
+    t = run(tri())
+    assert (t.emotion, t.intensity, t.normalized, t.register) == ("calm", 1, "", "formal")
+
+
+def test_bad_new_fields_default_not_none():
+    t = run(tri(emotion="zzz", intensity="x", register="??", normalized=None))
+    assert t is not None and (t.emotion, t.intensity, t.register) == ("calm", 1, "formal")
+    assert run(tri(emotion="happy", intensity=9)).intensity == 3
+
+
+def test_tone_derived_from_emotion():
+    assert run(tri(emotion="angry")).tone == "angry"
+    assert run(tri(emotion="sad", tone="calm")).tone == "upset"
+    assert run(tri(emotion="happy", tone="angry")).tone == "calm"
+
+
+def test_angry_3_complaint_escalates_even_if_model_said_agent():
+    assert run(tri(intent="complaint", emotion="angry", intensity=3, route="agent")).route == "escalate"
+    assert run(tri(intent="complaint", emotion="angry", intensity=2, tone="calm", route="agent")).route == "agent"
+
+
+def test_prompt_contains_glossary_and_fewshot():
+    from agent.orchestrator import PROMPT
+
+    text = PROMPT.format_messages(text="x", tenant_rules="r", client_summary="c")[0].content
+    assert "відмінити" in text and "скасувати" in text
+    assert "та ви шо, знову списали" in text
+    assert "emotion" in text and "normalized" in text

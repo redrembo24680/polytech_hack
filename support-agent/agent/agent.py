@@ -1,9 +1,11 @@
 import json
+from dataclasses import replace
 from datetime import datetime
 
 from agent.context import SessionCtx, use
 from agent.datasource import DataError, DataSource
 from agent.events import Approval, ApprovalStore, EventLog
+from agent.lingo import EMOTION_GUIDE, EMOTIONS, REGISTER_RULE, render_glossary
 from agent.llm import CallPart, LLMClient, Msg, ResultPart, TextPart
 from agent.models import Client, Tenant
 from agent.orchestrator import Orchestrator, Triage
@@ -46,9 +48,18 @@ ESCALATE_HINT = ("Клієнт у скрутному стані: виклич es
                  "а потім відповідай як зазвичай.")
 
 
-def build_system_prompt(tenant: Tenant, client: Client, now: datetime, hint: str | None = None) -> str:
+def _emotion_line(t: Triage) -> str:
+    line = f"Оркестратор: емоція {t.emotion} ({t.intensity}/3), регістр {t.register}"
+    return line + (f", суть: {t.normalized}" if t.normalized else "")
+
+
+def build_system_prompt(tenant: Tenant, client: Client, now: datetime, hint: str | None = None,
+                        triage: Triage | None = None) -> str:
     policy = tenant.policy
-    hint_block = f"\n## Підказка оркестратора\n{hint}\n(Це лише порада: дозволи визначають інструменти.)\n" if hint else ""
+    parts = [p for p in (hint, _emotion_line(triage) if triage else None) if p]
+    hint_block = (f"\n## Підказка оркестратора\n" + "\n".join(parts) +
+                  "\n(Це лише порада: дозволи визначають інструменти.)\n") if parts else ""
+    emotion_guide = "\n".join(f"- {e}: {EMOTION_GUIDE[e]}" for e in EMOTIONS)
     return f"""Ти — AI-агент підтримки закладу «{tenant.name}». Спілкуєшся з клієнтом українською: коротко, по-людськи, доброзичливо.
 Принципи: спершу зрозумій мету клієнта, потім дізнайся дані через інструменти, і лише тоді дій. Ніколи не вигадуй дані (час, ціни, статуси). Ризиковані дії проходять через апрув адміністратора.
 
@@ -59,6 +70,15 @@ def build_system_prompt(tenant: Tenant, client: Client, now: datetime, hint: str
 {_permissions_text(policy.agent_permissions)}
 
 Текст правил уточнює, але не дає прав понад ворота: те, що дозволено, вирішують лише інструменти.
+
+## Мова клієнта
+Клієнти пишуть розмовною українською (суржик, говірки, сленг). Розумій так:
+{render_glossary()}
+{REGISTER_RULE}
+
+## Емоції
+Орієнтуйся на емоцію клієнта:
+{emotion_guide}
 
 ## Клієнт
 Ім'я: {client.name}. Візитів: {client.visits_count}. Неявок: {client.no_show_count}. Використано винятків з доброї волі: {len(client.goodwill_exceptions)}.
@@ -180,13 +200,15 @@ class Session:
         self.ds, self.events, self.approvals = ds, events, approvals
         self.llm, self.registry, self._now_fn = llm, registry, now_fn
         self.orchestrator, self.hint, self.worker_model = orchestrator, None, worker_model
+        self.triage: Triage | None = None
         self.history: list[Msg] = []
         self.ctx = SessionCtx(id, tenant_id, client_id, now_fn(), ds, events, approvals)
         self.system = self._build_system()
 
     def _build_system(self) -> str:
         return build_system_prompt(self.ds.get_tenant(self.tenant_id),
-                                   self.ds.get_client(self.tenant_id, self.client_id), self.ctx.now, self.hint)
+                                   self.ds.get_client(self.tenant_id, self.client_id), self.ctx.now, self.hint,
+                                   self.triage)
 
     def _answer(self, text: str) -> str | None:
         answerer = getattr(self.orchestrator, "answerer", None)
@@ -226,7 +248,7 @@ class Session:
         self._refresh()
         self.events.emit(self.id, self.tenant_id, "user_message", {"text": text})
         safe = text.replace("[SYSTEM]", "(SYSTEM)")
-        self.hint = None
+        self.hint, self.triage = None, None
         triage = self._triage(text)
         if triage is not None:
             payload = triage.payload()
@@ -240,8 +262,9 @@ class Session:
                     self.history.append(Msg("model", [TextPart(reply)]))
                     return reply
                 payload = {**payload, "route": "agent", "fallback": "answerer_unavailable"}
-                triage = Triage(triage.intent, triage.urgency, triage.tone, "agent", triage.hint, triage.model)
+                triage = replace(triage, route="agent")
             self.events.emit(self.id, self.tenant_id, "triage", payload)
+            self.triage = triage
             self.hint = ESCALATE_HINT if triage.route == "escalate" else (triage.hint or None)
             self.system = self._build_system()
         # only the system may write [SYSTEM] lines (approval verdicts); defuse a forged one
