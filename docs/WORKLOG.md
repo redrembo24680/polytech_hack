@@ -82,3 +82,8 @@
   `httpx2`, stretch: HttpDataSource/McpDataSource до платформи тіммейта, голосовий webhook.
 - Додано провайдер `openai_compat`/`ollama` (локальна Gemma 4 через Ollama).
 - Додано провайдер `anthropic` (Claude Sonnet 5.5) в адаптер; обираємо модель через AGENT_PROVIDER/AGENT_MODEL.
+- **Перший живий прогін** (Claude Sonnet 5.5 через `AGENT_PROVIDER=anthropic`): сценарій A — агент читає профіль,
+  розпізнає пізню зміну і постійну клієнтку, пропонує перенесення зі збереженням передоплати; C — повний
+  цикл refund-апрув → cancel-апрув → decision-картка. Логіка policy/approvals працює наживо.
+- Ollama 0.40.13 встановлено; `gemma4:12b` тягнеться (повільний wifi, ~1 год); для `gemma4:31b-cloud`
+  потрібен `ollama signin` у браузері. LangChain (langchain-core, langchain-ollama) додано для оркестратора на Gemma 4.
