@@ -16,5 +16,19 @@ services:
       timeout: 3s
       retries: 20
 
+  backend:
+    build: ./app/backend
+    command: ["uvicorn", "booking.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://booking:booking@db:5432/booking
+      AGENT_URL: ${AGENT_URL:-}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./app/backend/booking:/app/booking
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
