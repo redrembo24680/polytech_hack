@@ -17,20 +17,26 @@
 ## 2. Структура
 
 ```
-agent/                  Python 3.12+, FastAPI, anthropic SDK, uv
-  main.py               FastAPI app, ендпоінти
-  agent.py              сесія, системний промпт, tool_runner
-  tools.py              @beta_tool функції
+support-agent/agent/    Python 3.12+, FastAPI, SDK провайдерів + LangChain, uv
+  main.py               FastAPI app, ендпоінти (/sessions, /tenants, /approvals, /metrics)
+  agent.py              сесія, системний промпт, власний tool-loop
+  llm.py                LLMClient: anthropic | gemini | ollama/openai_compat | fake; make_client()
+  orchestrator.py       Claude Sonnet (LangChain): тріаж і маршрут; Answerer (Gemma 4)
+  lingo.py              глосарій розмовної української, емоції, регістр
+  tools.py              ToolRegistry, 10 tools, default_registry()
   policy.py             permission engine (чиста логіка)
-  datasource.py         Protocol DataSource + MemoryDataSource + HttpDataSource
-  seed.json             копія сід-даних зі спеки апки (для MemoryDataSource)
+  cards.py              схеми карток (pydantic), parse_card
+  datasource.py         Protocol DataSource + MemoryDataSource + HttpDataSource (в роботі) + make_datasource
+  rules_text.py         RULES_TEXT_OVERRIDES для тенантів платформи (в роботі)
+  sessions.py           спільне створення сесій для чату, голосу і вебхука
+  voice.py              Vapi webhook /voice/tools (голосовий канал)
+  chat_webhook.py       POST /chat для сайту тіммейта (в роботі)
   events.py             лог подій сесій, approvals, метрики
-  cards.py              схеми карток (pydantic)
-  tests/                pytest
-web/
-  index.html            два екрани поруч: чат клієнта | copilot
-  app.js, style.css
+  seed.json             сід-дані для MemoryDataSource
+support-agent/web/      два екрани: чат клієнта | copilot (index.html, app.js, style.css)
 ```
+
+Запуск: `cd support-agent && uv run uvicorn agent.main:app --port 8000`, фронт роздається FastAPI з `/`.
 
 Запуск: `uv run uvicorn agent.main:app --port 8000`, фронт відкривається як статичний файл
 або роздається FastAPI з `/`.
@@ -44,10 +50,10 @@ web/
 
 - `MemoryDataSource` — читає `seed.json`, тримає стан у пам'яті, реалізує ту саму валідацію,
   що й апка (слот зайнятий, сума ≤ передоплати, статуси).
-- `McpDataSource` — клієнт до MCP-сервера платформи (`APP_MCP_URL`, streamable HTTP; пакет
+- `McpDataSource` (не реалізовано, замінено HTTP) — клієнт до MCP-сервера платформи (`APP_MCP_URL`, streamable HTTP; пакет
   `mcp`), викликає tools з тими самими іменами, що методи Protocol.
 - `HttpDataSource` — httpx-клієнт до `APP_API_URL` (запасний варіант, якщо MCP не готовий).
-- Вибір: `APP_MCP_URL` → Mcp, інакше `APP_API_URL` → Http, інакше Memory. Агент не знає різниці.
+- Фактичний вибір (`make_datasource`): `APP_API_URL` → Http (платформа тіммейта, порт 8001, в роботі), інакше Memory. Початковий задум: `APP_MCP_URL` → Mcp, потім Http, потім Memory. Агент не знає різниці.
 - Чому не віддаємо MCP-tools моделі напряму: між моделлю і дією має стояти permission engine
   і approval-флоу. Тому tools агента — наші обгортки, а MCP лише транспорт до даних.
 
@@ -103,23 +109,21 @@ web/
 
 ## 6. Агент (`agent.py`)
 
-- **Провайдер: Google Gemini API, модель Gemma 4** (`gemma-4-31b-it`, запасна
-  `gemma-4-26b-a4b-it`), SDK `google-genai`, нативний function calling. Причини: на івенті немає
-  спонсорських API-кредитів (перевірено через MLH DevRelay 2026-10-31), Gemini API free-тір
-  безкоштовний, а челенджі івенту "Best Use of Gemma 4" і "Best Open-Source AI Project" дають
-  два додаткові призи. Потрібен `GEMINI_API_KEY` з aistudio.google.com (бажано два ключі,
-  твій і тіммейта, бо денні ліміти free-тіру не опубліковані).
-  Альтернативи через той самий адаптер: Anthropic `claude-opus-5-5` (якщо з'явиться ключ),
-  OpenRouter `google/gemma-4-31b-it:free` (OpenAI-сумісний).
+- **Провайдери (`AGENT_PROVIDER`, `AGENT_MODEL`)**: `anthropic` (Claude Sonnet 5.5, `claude-sonnet-5-5`, типовий воркер для дій), `gemini` (Gemma 4 `gemma-4-31b-it` через Gemini API, SDK `google-genai`), `ollama`/`openai_compat` (локальна Gemma 4 через Ollama, `OPENAI_BASE_URL`), `fake` (тести й офлайн-демо). ~~Gemma 4 як головна модель~~ **замінено** (див. "Історія змін"): Gemma 4 лишається для простих відповідей і челенджу "Best Use of Gemma 4".
+- **Оркестрація (`orchestrator.py`)**: Claude Sonnet через LangChain тріажить кожне повідомлення: `intent`, `urgency`, `emotion`, `intensity` (1-3), `register`, `normalized`, `tone`, `hint`, маршрут `answer` / `agent` / `escalate`. Маршрут примусово виправляє код (`_enforce_route`): reschedule/cancel/refund завжди `agent`; скарга з `angry` 3/3 завжди `escalate`. `Answerer` (Gemma 4, Ollama або Gemini API) відповідає лише на прості інформаційні питання; якщо його немає, маршрут стає `agent`. Оркестратор лише радить, дії йдуть тільки через tools/policy/approvals. Налаштування: `ORCHESTRATOR*`, `ANSWERER*`.
+- **Емоції і мова (`lingo.py`)**: глосарій суржику/галицької говірки/чат-сленгу, `EMOTION_GUIDE`, `REGISTER_RULE`; воркер отримує розділи "Мова клієнта" та "Емоції" в системному промпті.
+- **Картки**: аргумент `card` валідує `cards.py` (`parse_card`), некоректна картка повертає `validation`.
+- **Голос**: Vapi webhook `POST /voice/tools[/{tool_name}]` (`voice.py`), сесія `voice:{tenant}:{phone}`, `show_card` замінюється на SMS.
+- **Інтеграція з сайтом тіммейта (в роботі)**: `HttpDataSource` до API платформи (`APP_API_URL`, :8001), `POST /chat` (`chat_webhook.py`), `GET /tenants`.
 - Межа `llm.py`: один клас `LLM` з методом `run_turn(system, messages, tools) -> events`,
   який крутить tool-loop для обраного провайдера і віддає уніфіковані події (text, tool_call,
   tool_result, reasoning). Решта агента (policy, tools, events, API) провайдера не знає.
   Назва моделі і провайдер — env `AGENT_PROVIDER`, `AGENT_MODEL`.
-- Для Gemini/Gemma: `tools=[{"function_declarations": [...]}]`, автоматичний tool-loop
+- Для Gemini/Gemma (провайдер `gemini`): `tools=[{"function_declarations": [...]}]`, автоматичний tool-loop
   SDK вимкнений (`automatic_function_calling.disable=True`), loop наш, щоб між викликом і дією
   стояв permission engine. Reasoning для copilot: модель просить коротко пояснювати перед кожним
   tool-викликом (текстова частина відповіді), це і логуємо як `thinking`.
-- Для Anthropic (альтернатива): `thinking={"type":"adaptive","display":"summarized"}`,
+- Для Anthropic (типовий воркер зараз): `thinking={"type":"adaptive","display":"summarized"}`,
   `output_config={"effort":"medium"}`, `max_tokens=4096`.
 - Системний промпт (стабільна частина кешується через `cache_control`):
   роль, принципи (спочатку зрозумій мету, потім дані, потім дія; не вигадуй; ризикове — через
@@ -212,3 +216,12 @@ Managed-платформа (Vapi або ElevenLabs Conversational) з tools, щ�
 - Розбіжність семантики MCP-tools і Protocol — контракт зафіксовано у спеці апки, розділ 4;
   будь-яка зміна іменувань узгоджується там.
 - Латентність Opus із thinking — effort medium, короткий промпт, кешування системної частини.
+
+## Історія змін
+- 2026-10-31: MVP реалізовано (policy, tools, апруви, події, чат + copilot); спека початково описувала лише Gemma 4 / MemoryDataSource.
+- 2026-10-31: додано провайдери `openai_compat`/`ollama` і `anthropic` (Claude Sonnet 5.5); рішення "Gemma 4 як головна модель" (розділ 6) **скасовано**: воркер Sonnet, Gemma 4 для простих відповідей.
+- 2026-10-31: оркестратор (`orchestrator.py`, LangChain): тріаж, маршрути answer/agent/escalate, подія `triage`, метрика `intents`.
+- 2026-10-31: емоції та розмовна українська (`lingo.py`), поля тріажу emotion/intensity/register/normalized, метрика `emotions`.
+- 2026-10-31: голосовий канал Vapi (`voice.py`, `scripts/vapi_setup.py`); stretch з розділу 12 реалізовано.
+- 2026-10-31: інтеграція з платформою тіммейта (в роботі): `HttpDataSource`, `make_datasource`, `RULES_TEXT_OVERRIDES`, `GET /tenants`, `POST /chat`; `McpDataSource` замінено HTTP.
+- 2026-10-31: після живого прогону (Sonnet 5.5): сценарії A і C працюють наживо; тестів 218.

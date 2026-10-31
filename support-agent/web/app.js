@@ -35,7 +35,9 @@ async function loadClients() {
   sel.textContent = "";
   try {
     const d = await api("/tenants/" + $("tenant").value);
-    d.clients.forEach((c) => {
+    const demo = d.clients.filter((c) => !c.id.startsWith("c-"));
+    const rest = d.clients.filter((c) => c.id.startsWith("c-"));
+    demo.concat(rest).slice(0, 15).forEach((c) => {
       const o = el("option", "", c.name + " (" + c.id + ")");
       o.value = c.id;
       sel.appendChild(o);
@@ -331,4 +333,12 @@ $("new-session").addEventListener("click", newSession);
 $("tenant").addEventListener("change", async () => { await loadClients(); newSession(); });
 setInterval(loadApprovals, 1500);
 setInterval(loadMetrics, 3000);
-loadClients().then(newSession);
+async function loadTenants() {
+  try {
+    const d = await api("/tenants");
+    const sel = $("tenant");
+    sel.textContent = "";
+    d.tenants.forEach((t) => { const o = el("option", "", t.id); o.value = t.id; o.title = t.name; sel.appendChild(o); });
+  } catch (_) { /* fallback: lumen/denta options from index.html */ }
+}
+loadTenants().then(loadClients).then(newSession);

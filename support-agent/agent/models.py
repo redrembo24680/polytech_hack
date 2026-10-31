@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentPermissions(BaseModel):
@@ -16,7 +16,9 @@ class AgentPermissions(BaseModel):
 
 
 class Policy(BaseModel):
-    rules_text: str
+    model_config = ConfigDict(extra="ignore")
+
+    rules_text: str = ""
     cancellation_window_hours: int
     late_change_forfeits_prepayment: bool
     no_show_fee: int
@@ -25,6 +27,8 @@ class Policy(BaseModel):
 
 
 class Tenant(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     name: str
     kind: Literal["salon", "clinic"]
@@ -39,6 +43,8 @@ class GoodwillException(BaseModel):
 
 
 class Client(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     tenant_id: str
     name: str
@@ -50,6 +56,8 @@ class Client(BaseModel):
 
 
 class Staff(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     tenant_id: str
     name: str
@@ -57,6 +65,8 @@ class Staff(BaseModel):
 
 
 class Service(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     tenant_id: str
     name: str
@@ -77,6 +87,8 @@ class HistoryEntry(BaseModel):
 
 
 class Booking(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     tenant_id: str
     client_id: str

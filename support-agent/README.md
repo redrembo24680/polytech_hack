@@ -86,4 +86,15 @@ Vapi тримає номер, STT/TTS і власний LLM-цикл, а наш�
 4. `uv run python scripts/vapi_setup.py --number` — створить асистента, надрукує `VAPI_ASSISTANT_ID` (додайте в `.env`) і номер.
 5. Зателефонуйте на номер з телефону клієнта із seed (напр. +380501110001).
 
+Веб-дзвінок ("Talk to assistant") без номера: асистент питає номер і викликає `identify_caller`; після апруву клієнту йде SMS.
+
 Ручна перевірка без Vapi: `curl -X POST localhost:8000/voice/tools/get_client_profile -H 'content-type: application/json' -d '{"phone":"+380501110001","args":{}}'`.
+
+## Підключення до платформи тіммейта
+1. Запустити сайт: `cd site && docker compose up -d --build` (бекенд :8001, веб :3000).
+2. У `site/.env` додати `AGENT_URL=http://host.docker.internal:8000` (і за потреби `AGENT_TIMEOUT=90`), перезапустити бекенд: `docker compose up -d backend`.
+3. Запустити агента проти платформи: `APP_API_URL=http://localhost:8001 uv run uvicorn agent.main:app --host 0.0.0.0 --port 8000`.
+4. Відкрити чат: http://localhost:3000/b/lumen/support. Віджет викликає `POST /chat` нашого агента (`agent/chat_webhook.py`).
+5. Апруви адміністратора: наш copilot на http://localhost:8000 (обрати тенанта `lumen` або `dentaplus`).
+
+Тенанти платформи: `lumen`, `dentaplus`. Без `APP_API_URL` агент працює на демо-даних (`lumen`, `denta`).

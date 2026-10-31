@@ -14,10 +14,10 @@
 | `GEMINI_API_KEY` | ключ з aistudio.google.com; без нього `make_client()` кидає `RuntimeError` | немає |
 | `ANTHROPIC_API_KEY` | ключ Anthropic API, лише для `anthropic`; без нього `make_client()` кидає `RuntimeError` | немає |
 | `AGENT_SYSTEM_AS_PREFIX` | `1` = системний промпт іде префіксом у першому user-повідомленні, а не як `system_instruction` (обхід для моделей без підтримки system) | вимкнено |
-| `APP_API_URL` | майбутнє: HTTP-контракт апки, напр. `http://localhost:8001`; у коді ще не читається | немає |
+| `APP_API_URL` | база REST API платформи тіммейта, напр. `http://localhost:8001`; задано -> `HttpDataSource`, інакше `MemoryDataSource` (`make_datasource`) | немає |
 | `APP_MCP_URL` | майбутнє: MCP апки, напр. `http://localhost:8001/mcp`; у коді ще не читається | немає |
 
-`.env` підхоплює `python-dotenv` у `make_client()`; шаблон у `support-agent/.env.example`. Планований вибір DataSource: `APP_MCP_URL` -> Mcp, інакше `APP_API_URL` -> Http, інакше Memory. Зараз завжди `MemoryDataSource`.
+`.env` підхоплює `python-dotenv` у `make_client()`; шаблон у `support-agent/.env.example`. Вибір DataSource: `APP_API_URL` -> `HttpDataSource`, інакше `MemoryDataSource` (MCP не реалізовано).
 
 ## Контракт DataSource <-> платформа
 Протокол `support-agent/agent/datasource.py:DataSource` відповідає 1:1 контракту апки (спека апки, розділ 4): `get_tenant`, `get_client`, `list_clients`, `find_client_by_phone`, `list_client_bookings`, `get_booking`, `find_slots`, `reschedule`, `cancel`, `refund`, `waive_no_show`, `add_goodwill`, `send_message`, `create_ticket`.
@@ -42,3 +42,10 @@
 
 - Vapi -> наш сервер: `POST /voice/tools` (server URL асистента). Тіло: `message.type="tool-calls"`, `message.toolCallList[]` (`id`, `function.name`, `function.arguments`), `message.call.customer.number`. Відповідь: `{"results":[{"toolCallId","result":"<рядок>"}]}`, HTTP 200.
 - Наш сервер -> Vapi: `scripts/vapi_setup.py` (`POST/PATCH /assistant`, `POST /phone-number`). Докс: https://docs.vapi.ai/tools/custom-tools
+
+
+## Платформа тіммейта (site): HttpDataSource і чат-вебхук
+- `HttpDataSource` (`agent/datasource.py`) ходить у `{APP_API_URL}/api/tenants/{tenant_id}/...` через `httpx`. Помилки `{"error","message"}` -> `DataError(code, message)`; недоступність -> `DataError("api_unavailable", ...)`. `list_client_bookings` = `GET /clients/{id}`.`bookings`. Додано `list_tenants()` (`GET /api/tenants`).
+- Id тенантів на сайті: `lumen`, `dentaplus` (у нашому seed `denta`). Наш UI бере список з `GET /tenants`.
+- Чат: віджет сайту викликає `POST {AGENT_URL}/chat` (`agent/chat_webhook.py`), тіло `{tenant_id, conversation_id, client_id|null, visitor_name, visitor_phone, messages[]}`, відповідь `{"reply": "<текст>"}` у межах `AGENT_TIMEOUT` (60 с, ставимо 90). Обробляємо лише останнє повідомлення `client`; сесія `chat:{tenant}:{conversation_id}`. Картки рендеряться текстом у відповідь.
+- Доставка після апруву (`deliver_reply` у `agent/sessions.py`): для чат-сесії вебхука (`session.meta` = `conversation_id` + `site_base_url` = `APP_API_URL`) шлемо `POST {APP_API_URL}/api/tenants/{tenant}/support/conversations/{conversation_id}/reply` з `{"text", "role": "agent"}` (таймаут 10 с, лише текст); помилка -> подія `error`, запит `decide` не падає. Голосова сесія -> `send_message(..., "sms", текст)`. Web-UI сесії (без `conversation_id`) без змін.

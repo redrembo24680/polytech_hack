@@ -11,12 +11,13 @@ from agent.agent import Session
 from agent.cards import parse_card
 from agent.context import use
 from agent.datasource import DataError
-from agent.tools import default_registry
+from agent.tools import ToolSpec, default_registry, _schema
 
 router = APIRouter()
 
 NOT_FOUND_TEXT = "Клієнта з таким номером не знайдено"
 SMS_SENT_TEXT = "картку надіслано SMS"
+ASK_PHONE_FIRST = "Спочатку назвіть номер телефону, на який робили запис."
 
 
 def normalize_phone(raw: str | None) -> str:
@@ -44,29 +45,63 @@ def render_card_text(card: dict) -> str:
     return "\n".join(lines)
 
 
-def _session_for(app, tenant: str, client) -> Session:
+def voice_registry(session_ref: list):
+    """default_registry + identify_caller, прив'язаний до сесії (лише голосовий канал)."""
+    reg = default_registry()
+
+    def identify_caller(phone: str) -> dict:
+        session: Session = session_ref[0]
+        found = session.ds.find_client_by_phone(session.tenant_id, normalize_phone(phone))
+        if not found:
+            return {"error": "not_found", "message": NOT_FOUND_TEXT}
+        c = found[0]
+        session.client_id = session.ctx.client_id = c.id
+        session.meta["phone"] = c.phone
+        return {"status": "identified", "name": c.name, "visits_count": c.visits_count,
+                "no_show_count": c.no_show_count}
+
+    reg.register(ToolSpec("identify_caller", "Визначити клієнта за номером телефону, який він назвав "
+                          "(лише якщо номер дзвінка невідомий).",
+                          _schema({"phone": ("string", "Номер телефону клієнта, на який робили запис")}),
+                          identify_caller))
+    return reg
+
+
+def _new_session(app, key: str, tenant: str, client_id: str | None, phone: str | None) -> Session:
     st = app.state
-    key = f"voice:{tenant}:{client.phone}"
     with st.guard:
         s = st.sessions.get(key)
         if s is None:
-            s = Session(key, tenant, client.id, "voice", st.ds, st.events, st.approvals, st.llm,
-                        default_registry(), st.now_fn, None, None)
+            ref: list = []
+            s = Session(key, tenant, client_id, "voice", st.ds, st.events, st.approvals, st.llm,
+                        voice_registry(ref), st.now_fn, None, None)
+            ref.append(s)
+            if phone:
+                s.meta["phone"] = phone
             st.sessions[key] = s
             st.locks[key] = threading.Lock()
         return s
 
 
-def run_tool(app, tenant: str, phone: str, name: str, args: dict) -> str:
+def _session_for(app, tenant: str, client) -> Session:
+    return _new_session(app, f"voice:{tenant}:{client.phone}", tenant, client.id, client.phone)
+
+
+def run_tool(app, tenant: str, phone: str, name: str, args: dict, call_id: str = "") -> str:
     st = app.state
-    try:
-        clients = st.ds.find_client_by_phone(tenant, normalize_phone(phone))
-    except DataError as e:
-        return json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False)
-    if not clients:
-        return NOT_FOUND_TEXT
-    session = _session_for(app, tenant, clients[0])
+    if normalize_phone(phone):
+        try:
+            clients = st.ds.find_client_by_phone(tenant, normalize_phone(phone))
+        except DataError as e:
+            return json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False)
+        if not clients:
+            return NOT_FOUND_TEXT
+        session = _session_for(app, tenant, clients[0])
+    else:  # веб-дзвінок без номера: сесія за call.id, лише identify_caller до прив'язки
+        session = _new_session(app, f"voice:{tenant}:call:{call_id}", tenant, None, None)
     with st.locks[session.id]:
+        if session.client_id is None and name != "identify_caller":
+            return ASK_PHONE_FIRST
         session._refresh()
         with use(session.ctx):
             result = session.registry.call(name, args)
@@ -96,7 +131,9 @@ def vapi_tools(request: Request, body: dict):
     message = body.get("message") or {}
     if message.get("type") != "tool-calls":
         return {"ok": True}
-    phone = ((message.get("call") or {}).get("customer") or {}).get("number", "")
+    call = message.get("call") or {}
+    phone = (call.get("customer") or {}).get("number", "")
+    call_id = call.get("id") or ""
     tenant = _tenant(message)
     results = []
     for tc in message.get("toolCallList") or []:
@@ -104,7 +141,7 @@ def vapi_tools(request: Request, body: dict):
         name = fn.get("name") or tc.get("name") or ""
         args = _args(fn.get("arguments", tc.get("arguments")))
         try:
-            text = run_tool(request.app, tenant, phone, name, args)
+            text = run_tool(request.app, tenant, phone, name, args, call_id)
         except Exception:
             text = json.dumps({"error": "internal", "message": "Внутрішня помилка інструмента."}, ensure_ascii=False)
         results.append({"toolCallId": tc.get("id"), "result": text})

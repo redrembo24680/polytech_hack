@@ -7,11 +7,17 @@ support-agent/agent/
   tools.py       ToolRegistry (валідація, policy gating, події, WRITE_LOCK), 10 tools, default_registry()
   cards.py       SlotsCard/BookingSummaryCard/DecisionCard, parse_card(), card_json_schema() для Gemini
   policy.py      decide() -> Allow | NeedsApproval | Forbidden; is_late_change; goodwill_used_in_window
-  datasource.py  Protocol DataSource, DataError(code, message), MemoryDataSource
+  datasource.py  Protocol DataSource, DataError, MemoryDataSource, HttpDataSource (в роботі), make_datasource()
+  orchestrator.py Triage, Orchestrator (Claude Sonnet, LangChain), Answerer (Gemma 4), make_orchestrator()
+  lingo.py       GLOSSARY, EMOTIONS, EMOTION_GUIDE, REGISTER_RULE
+  voice.py       Vapi webhook: POST /voice/tools[/{tool_name}], сесії voice:{tenant}:{phone}
+  chat_webhook.py POST /chat для сайту тіммейта (в роботі)
+  sessions.py    get_or_create_session, ensure_backends (спільне для чату, голосу, вебхука)
+  rules_text.py  RULES_TEXT_OVERRIDES для тенантів платформи (в роботі)
   models.py      pydantic: Tenant, Policy, AgentPermissions, Client, Booking, Slot, Ticket
   events.py      EventLog, Event, ApprovalStore, Approval, metrics()
   context.py     SessionCtx (contextvar), use(ctx), get_ctx()
-  llm.py         Msg/TextPart/CallPart/ResultPart, LLMClient, GeminiClient, FakeClient, make_client()
+  llm.py         Msg/TextPart/CallPart/ResultPart, LLMClient, GeminiClient, AnthropicClient, OpenAICompatClient, FakeClient, make_client()
   seed.json      сід-дані: tenants lumen і denta з клієнтами, бронюваннями
 support-agent/scripts/smoke.py CLI-прогін сценаріїв
 support-agent/tests/ pytest
@@ -29,3 +35,6 @@ support-agent/tests/ pytest
 - Час усюди з таймзоною `Europe/Kyiv`, `now_fn` інжектиться (тести фіксують час). `MemoryDataSource(seed, now, now_fn)`: `now` будує демо-дані, `now_fn` використовується для перевірки "не в минулому", слотів і часу в історії.
 
 - `support-agent/agent/orchestrator.py`: `Triage`, `Orchestrator` (LCEL: `ChatPromptTemplate | chat_model | JsonOutputParser`), `make_orchestrator()`. `Session` приймає `orchestrator`, `create_app(orchestrator=...)` створює його ліниво разом з `make_client()`. `EventType` має `triage`, `metrics()` повертає `intents`.
+- Провайдери `make_client()` (`AGENT_PROVIDER`): `anthropic` (Sonnet 5.5), `gemini`, `ollama`/`openai_compat`, `fake`. Оркестратор: `ORCHESTRATOR_PROVIDER` anthropic|gemini|ollama; відповідач: `ANSWERER_PROVIDER` ollama|gemini.
+- Нові ендпоінти: `GET /tenants`, `POST /voice/tools`, `POST /voice/tools/{tool_name}`, `POST /chat`. `make_datasource` обирає `HttpDataSource`, якщо задано `APP_API_URL`, інакше `MemoryDataSource`.
+- Уточнення: стан з `git status` чистий, усі перелічені модулі закомічені; "в роботі" означає, що інтеграція з платформою тіммейта ще не перевірена наживо.
