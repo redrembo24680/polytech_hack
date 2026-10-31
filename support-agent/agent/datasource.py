@@ -1,10 +1,14 @@
 import json
+import os
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Protocol
+
+import httpx
 from zoneinfo import ZoneInfo
 
+from agent.rules_text import RULES_TEXT_OVERRIDES
 from agent.models import (
     Booking,
     Client,
@@ -33,6 +37,7 @@ class DataError(Exception):
 
 
 class DataSource(Protocol):
+    def list_tenants(self) -> list[Tenant]: ...
     def get_tenant(self, tenant_id: str) -> Tenant: ...
     def get_client(self, tenant_id: str, client_id: str) -> Client: ...
     def list_clients(self, tenant_id: str) -> list[Client]: ...
@@ -121,6 +126,9 @@ class MemoryDataSource(DataSource):
             )
 
     # ---- lookups ----
+
+    def list_tenants(self) -> list[Tenant]:
+        return list(self._tenants.values())
 
     def get_tenant(self, tenant_id: str) -> Tenant:
         try:
@@ -285,3 +293,132 @@ class MemoryDataSource(DataSource):
         )
         self._tickets.append(ticket)
         return ticket
+
+
+KYIV = ZoneInfo("Europe/Kyiv")
+UNAVAILABLE_TEXT = "Платформа бронювань недоступна."
+
+
+def _goodwill_date(raw: str) -> datetime:
+    if len(raw) == 10:  # YYYY-MM-DD
+        return datetime.combine(datetime.fromisoformat(raw).date(), time.min, tzinfo=KYIV)
+    return datetime.fromisoformat(raw)
+
+
+class HttpDataSource(DataSource):
+    """Клієнт REST API платформи бронювань (`/api/tenants/{tenant_id}/...`)."""
+
+    def __init__(self, base_url: str, timeout: float = 15, transport: httpx.BaseTransport | None = None):
+        self._http = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout, transport=transport)
+
+    def _call(self, method: str, path: str, *, params: dict | None = None, json_body: dict | None = None):
+        try:
+            r = self._http.request(method, path, params=params, json=json_body)
+        except httpx.HTTPError:
+            raise DataError("api_unavailable", UNAVAILABLE_TEXT) from None
+        try:
+            data = r.json()
+        except ValueError:
+            data = None
+        if r.is_success:
+            return data
+        if isinstance(data, dict) and data.get("error"):
+            raise DataError(str(data["error"]), str(data.get("message") or data["error"]))
+        if r.status_code == 422:
+            raise DataError("validation", "Некоректний запит.")
+        if r.status_code >= 500:
+            raise DataError("api_unavailable", UNAVAILABLE_TEXT)
+        raise DataError("api_error", f"Платформа відповіла HTTP {r.status_code}.")
+
+    def _t(self, tenant_id: str, path: str = "") -> str:
+        return f"/api/tenants/{tenant_id}{path}"
+
+    @staticmethod
+    def _client(data: dict) -> Client:
+        data = {**data, "goodwill_exceptions": [
+            {**g, "date": _goodwill_date(g["date"])} for g in data.get("goodwill_exceptions") or []]}
+        return Client.model_validate(data)
+
+    def list_tenants(self) -> list[Tenant]:
+        return [self._tenant(t) for t in self._call("GET", "/api/tenants")]
+
+    @staticmethod
+    def _tenant(data: dict) -> Tenant:
+        tenant = Tenant.model_validate(data)
+        if not tenant.policy.rules_text:
+            tenant.policy.rules_text = RULES_TEXT_OVERRIDES.get(tenant.id, "")
+        return tenant
+
+    def get_tenant(self, tenant_id: str) -> Tenant:
+        return self._tenant(self._call("GET", self._t(tenant_id)))
+
+    def get_client(self, tenant_id: str, client_id: str) -> Client:
+        return self._client(self._call("GET", self._t(tenant_id, f"/clients/{client_id}")))
+
+    def list_clients(self, tenant_id: str) -> list[Client]:
+        return [self._client(c) for c in self._call("GET", self._t(tenant_id, "/clients"))]
+
+    def find_client_by_phone(self, tenant_id: str, phone: str) -> list[Client]:
+        data = self._call("GET", self._t(tenant_id, "/clients"), params={"phone": phone})
+        return [self._client(c) for c in data]
+
+    def list_client_bookings(self, tenant_id: str, client_id: str) -> list[Booking]:
+        data = self._call("GET", self._t(tenant_id, f"/clients/{client_id}"))
+        return [Booking.model_validate(b) for b in data.get("bookings") or []]
+
+    def get_booking(self, tenant_id: str, booking_id: str) -> Booking:
+        return Booking.model_validate(self._call("GET", self._t(tenant_id, f"/bookings/{booking_id}")))
+
+    def find_slots(
+        self, tenant_id: str, service_id: str, from_dt: datetime, to_dt: datetime, staff_id: str | None = None
+    ) -> list[Slot]:
+        params = {"service_id": service_id, "from": from_dt.isoformat(), "to": to_dt.isoformat()}
+        if staff_id:
+            params["staff_id"] = staff_id
+        data = self._call("GET", self._t(tenant_id, "/slots"), params=params)
+        return [Slot.model_validate(s) for s in data][:MAX_SLOTS]
+
+    def _booking_action(self, tenant_id: str, booking_id: str, action: str, body: dict) -> Booking:
+        return Booking.model_validate(
+            self._call("POST", self._t(tenant_id, f"/bookings/{booking_id}/{action}"), json_body=body))
+
+    def reschedule(
+        self, tenant_id: str, booking_id: str, start: datetime, staff_id: str | None,
+        reason: str, by: str, forfeit_prepayment: bool,
+    ) -> Booking:
+        body = {"start": start.isoformat(), "reason": reason, "by": by, "forfeit_prepayment": forfeit_prepayment}
+        if staff_id:
+            body["staff_id"] = staff_id
+        return self._booking_action(tenant_id, booking_id, "reschedule", body)
+
+    def cancel(self, tenant_id: str, booking_id: str, reason: str, by: str, forfeit_prepayment: bool) -> Booking:
+        return self._booking_action(tenant_id, booking_id, "cancel",
+                                    {"reason": reason, "by": by, "forfeit_prepayment": forfeit_prepayment})
+
+    def refund(self, tenant_id: str, booking_id: str, amount: int, reason: str, by: str) -> Booking:
+        return self._booking_action(tenant_id, booking_id, "refund", {"amount": amount, "reason": reason, "by": by})
+
+    def waive_no_show(self, tenant_id: str, booking_id: str, reason: str, by: str) -> Booking:
+        return self._booking_action(tenant_id, booking_id, "waive-no-show", {"reason": reason, "by": by})
+
+    def add_goodwill(self, tenant_id: str, client_id: str, booking_id: str, reason: str, by: str) -> Client:
+        return self._client(self._call("POST", self._t(tenant_id, f"/clients/{client_id}/goodwill"),
+                                       json_body={"booking_id": booking_id, "reason": reason, "by": by}))
+
+    def send_message(self, tenant_id: str, client_id: str, channel: str, text: str) -> OutgoingMessage:
+        return OutgoingMessage.model_validate(
+            self._call("POST", self._t(tenant_id, "/messages"),
+                       json_body={"client_id": client_id, "channel": channel, "text": text}))
+
+    def create_ticket(self, tenant_id: str, client_id: str, summary: str, priority: str) -> Ticket:
+        return Ticket.model_validate(
+            self._call("POST", self._t(tenant_id, "/tickets"),
+                       json_body={"client_id": client_id, "summary": summary, "priority": priority}))
+
+
+def make_datasource(now_fn: Callable[[], datetime]) -> DataSource:
+    """APP_API_URL задано -> платформа тіммейта по HTTP, інакше демо-дані в пам'яті."""
+    url = os.environ.get("APP_API_URL")
+    if url:
+        return HttpDataSource(url)
+    return MemoryDataSource.from_file(Path(__file__).parent / "seed.json", now_fn(), now_fn=now_fn)

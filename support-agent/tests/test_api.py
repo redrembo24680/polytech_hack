@@ -200,3 +200,10 @@ def test_injected_orchestrator_answers_without_worker():
     assert c.post(f"/sessions/{sid}/messages", json={"text": "До котрої працюєте?"}).json()["reply"] == "Працюємо до 20:00."
     types = [e["type"] for e in c.get(f"/sessions/{sid}/events").json()["events"]]
     assert types == ["user_message", "triage", "assistant_message"]
+
+
+def test_list_tenants():
+    c = TestClient(create_app(ds=MemoryDataSource.from_file(SEED_PATH, NOW), llm=FakeClient([]), now_fn=lambda: NOW))
+    r = c.get("/tenants")
+    assert r.status_code == 200
+    assert r.json() == {"tenants": [{"id": "lumen", "name": "Lumen Beauty"}, {"id": "denta", "name": "DentaPlus"}]}

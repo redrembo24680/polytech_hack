@@ -331,4 +331,12 @@ $("new-session").addEventListener("click", newSession);
 $("tenant").addEventListener("change", async () => { await loadClients(); newSession(); });
 setInterval(loadApprovals, 1500);
 setInterval(loadMetrics, 3000);
-loadClients().then(newSession);
+async function loadTenants() {
+  try {
+    const d = await api("/tenants");
+    const sel = $("tenant");
+    sel.textContent = "";
+    d.tenants.forEach((t) => { const o = el("option", "", t.id); o.value = t.id; o.title = t.name; sel.appendChild(o); });
+  } catch (_) { /* fallback: lumen/denta options from index.html */ }
+}
+loadTenants().then(loadClients).then(newSession);

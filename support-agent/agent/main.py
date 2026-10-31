@@ -14,12 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from agent import voice
+from agent import chat_webhook, voice
 from agent.agent import Session, execute_approved
-from agent.datasource import DataError, MemoryDataSource
+from agent.datasource import DataError, make_datasource
 from agent.events import ApprovalStore, EventLog, metrics
 from agent.llm import make_client
 from agent.orchestrator import make_orchestrator
+from agent.sessions import ensure_backends
 from agent.tools import default_registry
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,7 +49,7 @@ class Decision(BaseModel):
 
 def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     now_fn = now_fn or (lambda: datetime.now(ZoneInfo("Europe/Kyiv")))
-    ds = ds or MemoryDataSource.from_file(Path(__file__).parent / "seed.json", now_fn(), now_fn=now_fn)
+    ds = ds or make_datasource(now_fn)
     app = FastAPI(title="Support agent")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     st = app.state
@@ -88,14 +89,11 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     @app.post("/sessions")
     def create_session(body: NewSession):
         lookup(ds.get_client, body.tenant_id, body.client_id)
+        try:
+            ensure_backends(app, lambda: make_client())
+        except RuntimeError as e:
+            raise ApiError(503, "llm_unavailable", str(e)) from None
         with st.guard:
-            if st.llm is None:
-                try:
-                    st.llm = make_client()
-                except RuntimeError as e:
-                    raise ApiError(503, "llm_unavailable", str(e)) from None
-            if not st.orch_ready:
-                st.orchestrator, st.orch_ready = make_orchestrator(), True
             st.counter += 1
             sid = f"s-{st.counter}"
         st.sessions[sid] = Session(sid, body.tenant_id, body.client_id, body.channel, ds,
@@ -120,6 +118,10 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     def get_events(session_id: str, after: int = 0):
         session_of(session_id)
         return {"events": [e.model_dump(mode="json") for e in st.events.since(session_id, after)]}
+
+    @app.get("/tenants")
+    def list_tenants():
+        return {"tenants": [{"id": t.id, "name": t.name} for t in ds.list_tenants()]}
 
     @app.get("/tenants/{tenant_id}")
     def get_tenant(tenant_id: str):
@@ -164,6 +166,7 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
         return {**out, "error": error} if error else out
 
     app.include_router(voice.router)
+    app.include_router(chat_webhook.router)
     if os.path.isdir(ROOT / "web"):
         app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")
     return app
