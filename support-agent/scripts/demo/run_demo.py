@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -160,6 +161,23 @@ def approve(cop: Page, tool: str | None, note: str | None, cust: Page | None = N
     return base
 
 
+def sms_code(cust: Page, agent: str, sc: dict, fallback: str) -> str:
+    """Код із події `sms` в журналі сесії агента; інакше --otp."""
+    try:
+        conv = cust.evaluate(
+            "(t) => { const r = localStorage.getItem('support:' + t); return r ? JSON.parse(r).conversationId : null }",
+            sc["tenant"])
+        url = f"{agent}/sessions/chat:{sc['tenant']}:{conv}/events"
+        data = json.loads(urllib.request.urlopen(url, timeout=10).read())
+        events = data if isinstance(data, list) else (data.get("events") or [])
+        for ev in reversed(events):
+            if ev.get("type") == "sms" and (ev.get("payload") or {}).get("code"):
+                return str(ev["payload"]["code"])
+    except Exception:
+        pass
+    return fallback
+
+
 def run_scene(scene: str, args, browser) -> None:
     sc = dict(SCENES[scene])
     if scene == "A" and args.slang:
@@ -191,7 +209,12 @@ def run_scene(scene: str, args, browser) -> None:
                     if time.time() > deadline:
                         raise
                     time.sleep(1)
-            wait_reply(cust, base)
+            first = wait_reply(cust, base)
+            if "SMS" in first or "код підтвердження" in first:
+                code = sms_code(cust, args.agent, sc, args.otp)
+                cust.wait_for_timeout(1500)
+                base = send_message(cust, code)
+                wait_reply(cust, base, "підтвердження номера")
             if scene == "A":
                 base = agent_count(cust)
                 base = send_message(cust, "1")
@@ -243,6 +266,7 @@ def main() -> int:
     ap.add_argument("--site", default="http://localhost:3000")
     ap.add_argument("--site-api", default="http://localhost:8001")
     ap.add_argument("--agent", default="http://localhost:8000")
+    ap.add_argument("--otp", default="1234", help="код SMS, якщо його немає в подіях агента")
     ap.add_argument("--no-reset", action="store_true")
     ap.add_argument("--slang", action="store_true", help="сцена A: розмовна фраза")
     ap.add_argument("--mp4", action="store_true", help="конвертувати у mp4 (потрібен ffmpeg)")
