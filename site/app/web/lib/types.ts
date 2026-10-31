@@ -15,7 +15,7 @@ export interface AgentPermissions {
   cancel: AutoGate;
   refund: "auto_under_limit" | "approval" | "forbidden";
   refund_auto_limit: number;
-  goodwill_exception: AutoGate;
+  goodwill_exception: Gate;
   goodwill_per_client_per_180d: number;
   goodwill_requires_zero_no_shows: boolean;
   waive_no_show_fee: Gate;
