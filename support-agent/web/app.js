@@ -1,4 +1,5 @@
 "use strict";
+const EMOTION_EMOJI = { calm: "😌", anxious: "😟", sad: "😢", frustrated: "😤", angry: "😡", happy: "😊" };
 const $ = (id) => document.getElementById(id);
 const state = { sid: null, last: 0, busy: false, seen: new Set(), eventTimer: null };
 
@@ -186,10 +187,13 @@ function renderFeed(ev) {
       break;
     }
     case "triage": {
-      row.appendChild(el("span", "", `🧭 Оркестратор (${p.model || "?"}): ` + [p.intent, p.urgency, p.tone].join(" · ") + " → " + p.route));
+      const emo = EMOTION_EMOJI[p.emotion] || "";
+      row.appendChild(el("span", "", `🧭 Оркестратор (${p.model || "?"}): ` + [p.intent, p.urgency, p.tone].join(" · ") +
+        (p.emotion ? ` · ${emo} ${p.emotion}${p.intensity ? " " + p.intensity + "/3" : ""}` : "") + " → " + p.route));
+      if (p.normalized) row.appendChild(el("div", "", "≈ " + p.normalized));
       const color = { urgent: "#d33", high: "#d90" }[p.urgency];
       if (color) { row.style.color = color; row.style.fontWeight = "600"; }
-      if (p.hint) row.title = p.hint;
+      if (p.hint || p.normalized) row.title = [p.normalized, p.hint].filter(Boolean).join("\n");
       break;
     }
     case "error": row.textContent = "⚠ " + (p.message || pretty(p)); break;
@@ -299,6 +303,12 @@ async function loadMetrics() {
       t.appendChild(el("span", "", "Наміри (оркестратор)"));
       grid.appendChild(t);
     }
+    Object.entries(m.emotions || {}).forEach(([k, v]) => {
+      const t = el("div", "tile");
+      t.appendChild(el("b", "", (EMOTION_EMOJI[k] || "") + " " + v));
+      t.appendChild(el("span", "", "Емоція: " + k));
+      grid.appendChild(t);
+    });
     Object.keys(METRIC_LABELS).forEach((k) => {
       if (!(k in m)) return;
       const t = el("div", "tile");

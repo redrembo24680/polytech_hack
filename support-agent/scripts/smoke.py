@@ -51,7 +51,7 @@ def describe(event) -> str:
     elif t in ("approval_created", "approval_decided"):
         detail = f"{p.get('id')} {p.get('tool')} status={p.get('status')} {short(p.get('args'))}"
     elif t == "triage":
-        detail = f"{p.get('intent')}/{p.get('urgency')}/{p.get('tone')} -> {p.get('route')} model={p.get('model')} {short(p.get('hint', ''))}"
+        detail = f"{p.get('intent')}/{p.get('urgency')}/{p.get('tone')} {p.get('emotion')}:{p.get('intensity')}/{p.get('register')} -> {p.get('route')} model={p.get('model')} {short(p.get('hint', ''))}"
     else:
         detail = short(p)
     return f"#{event.id:<3} {t:<17} {detail}"
