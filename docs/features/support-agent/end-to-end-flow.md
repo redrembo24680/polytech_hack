@@ -17,3 +17,7 @@
 
 ## Крок 0: тріаж оркестратором
 Після `user_message` `Session.send` викликає `Orchestrator.triage` (Claude Sonnet через LangChain) і емітить `triage`. `answer`: `Answerer` (Gemma 4) формує відповідь, емітиться `assistant_message` з `model` відповідача, воркер не викликається; якщо відповідача немає або він не відповів, `triage` отримує `route: agent`, `fallback: answerer_unavailable`, і працює воркер. `escalate` або `agent`: далі звичайний цикл, а підказка (`hint`) додається в системний промпт розділом "Підказка оркестратора". Відповіді воркера теж мають `model`. Якщо оркестратор недоступний, `triage` відсутня і флоу без змін.
+
+## Голосовий потік (Vapi)
+
+Дзвінок -> Vapi STT -> LLM Vapi вирішує викликати tool -> `POST /voice/tools` -> клієнт за номером (`find_client_by_phone`) -> сесія `voice:{tenant}:{phone}` (канал voice, одна на номер) -> `registry.call` під тим самим policy/approval gating -> результат рядком у `results`. Write-дія, що потребує апруву, створює pending approval у copilot; агент каже, що перевірить в адміністратора й передзвонить. `show_card` надсилає картку SMS-повідомленням.

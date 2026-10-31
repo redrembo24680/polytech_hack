@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from agent import voice
 from agent.agent import Session, execute_approved
 from agent.datasource import DataError, MemoryDataSource
 from agent.events import ApprovalStore, EventLog, metrics
@@ -54,6 +55,7 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     st.ds, st.events, st.approvals = ds, EventLog(now_fn), ApprovalStore(now_fn)
     st.sessions, st.locks = {}, {}
     st.llm, st.counter, st.guard = llm, 0, threading.Lock()
+    st.now_fn = now_fn
     st.orchestrator, st.orch_ready = orchestrator, orchestrator is not None
 
     @app.exception_handler(ApiError)
@@ -161,6 +163,7 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
         out = {"approval": approval.model_dump(mode="json"), "result": result, "reply": reply}
         return {**out, "error": error} if error else out
 
+    app.include_router(voice.router)
     if os.path.isdir(ROOT / "web"):
         app.mount("/", StaticFiles(directory=ROOT / "web", html=True), name="web")
     return app

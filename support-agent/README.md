@@ -73,3 +73,15 @@ Claude Sonnet (через LangChain `ChatAnthropic`, `agent/orchestrator.py`) н
 - `agent`: звичайний цикл; підказка оркестратора потрапляє в системний промпт цього ходу.
 Дії зі зміни запису, скасування і повернення коштів завжди йдуть через `agent` (це примусово в коді, незалежно від відповіді моделі). Подія `triage` видна в copilot і в метриках (`intents`).
 Налаштування: `ORCHESTRATOR=on|off`, `ORCHESTRATOR_PROVIDER=anthropic|ollama|gemini` (за замовчуванням `anthropic`, `ORCHESTRATOR_MODEL=claude-sonnet-5-5`, потрібен `ANTHROPIC_API_KEY`, без ключа оркестратор вимкнено); відповідач: `ANSWERER=on|off`, `ANSWERER_PROVIDER=ollama|gemini` (за замовчуванням `ollama`), `ANSWERER_MODEL` (`gemma4:12b`; для `gemini` `gemma-4-31b-it`), `ANSWERER_BASE_URL`. Якщо оркестратор недоступний, він мовчки пропускається.
+
+## Телефонія через Vapi
+
+Vapi тримає номер, STT/TTS і власний LLM-цикл, а наші інструменти (з тією ж політикою й апрувами) викликає вебхуком `POST /voice/tools`. Апруви з дзвінків потрапляють у той самий copilot.
+
+1. У `.env`: `VAPI_API_KEY=...` (https://dashboard.vapi.ai), `VOICE_TENANT_ID=lumen`.
+2. `AGENT_PROVIDER=fake ORCHESTRATOR=off uv run uvicorn agent.main:app --port 8000` (LLM для голосу не потрібен).
+3. `ngrok http 8000`, адресу `https://....ngrok-free.app` запишіть у `.env` як `PUBLIC_URL`.
+4. `uv run python scripts/vapi_setup.py --number` — створить асистента, надрукує `VAPI_ASSISTANT_ID` (додайте в `.env`) і номер.
+5. Зателефонуйте на номер з телефону клієнта із seed (напр. +380501110001).
+
+Ручна перевірка без Vapi: `curl -X POST localhost:8000/voice/tools/get_client_profile -H 'content-type: application/json' -d '{"phone":"+380501110001","args":{}}'`.
