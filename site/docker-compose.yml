@@ -30,5 +30,15 @@ services:
       db:
         condition: service_healthy
 
+  mcp:
+    build: ./app/mcp
+    environment:
+      APP_API_URL: http://backend:8001
+      MCP_TRANSPORT: http
+    ports:
+      - "8002:8002"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:

@@ -1,0 +1,16 @@
+{
+  "mcp http /mcp": "app/mcp/booking_mcp/__main__.py:main",
+  "tool get_tenant": "app/mcp/booking_mcp/server.py:get_tenant",
+  "tool find_client_by_phone": "app/mcp/booking_mcp/server.py:find_client_by_phone",
+  "tool get_client": "app/mcp/booking_mcp/server.py:get_client",
+  "tool get_booking": "app/mcp/booking_mcp/server.py:get_booking",
+  "tool find_slots": "app/mcp/booking_mcp/server.py:find_slots",
+  "tool reschedule_booking": "app/mcp/booking_mcp/server.py:reschedule_booking",
+  "tool cancel_booking": "app/mcp/booking_mcp/server.py:cancel_booking",
+  "tool refund_booking": "app/mcp/booking_mcp/server.py:refund_booking",
+  "tool waive_no_show": "app/mcp/booking_mcp/server.py:waive_no_show",
+  "tool add_goodwill": "app/mcp/booking_mcp/server.py:add_goodwill",
+  "tool send_message": "app/mcp/booking_mcp/server.py:send_message",
+  "tool create_ticket": "app/mcp/booking_mcp/server.py:create_ticket",
+  "factory build_server": "app/mcp/booking_mcp/server.py:build_server"
+}
