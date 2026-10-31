@@ -60,6 +60,7 @@ def test_resume_after_approval_executes_and_continues(sess_factory):
 def test_execute_approved_unknown_tool(sess_factory):
     s = sess_factory("lumen", "max", FakeClient([]))
     ap = s.approvals.create(s.id, "lumen", "nope", {}, "r")
+    ap = s.approvals.decide(ap.id, True, "Оля", "ок")
     assert execute_approved(ap, s.ctx) == {"error": "unknown_tool"}
 
 
