@@ -188,6 +188,39 @@ async function main() {
   s.addText("Частка неявок: SchedulingKit, Appointment No-Show Statistics 2026 (оцінки вендора).", { x: M, y: 6.75, w: 10, h: 0.3, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true, objectName: "source" });
   s.addNotes("Біль реальний: до чверті записів не доходять, а адміністратор вручну перевіряє правила й переносить записи. Боти не допомагають — вони не мають доступу до системи. Ми зробили платформу для бізнесів за записом і агента, який працює поверх неї: читає правила саме цього бізнесу й виконує дії, а ризикові рішення віддає людині.");
 
+  // 3. Market and competitors -----------------------------------------------
+  s = pres.addSlide({ masterName: "Content", sectionTitle: "Проблема і рішення" });
+  s.addText("Ринок і конкуренти", { placeholder: "title" });
+  const mstats = [
+    ["≈20%", "записів у салонах — неявки", C.accent2],
+    ["$3 600", "втрат салону на місяць через неявки", C.accent2],
+    ["−45%", "неявок, коли є передоплата й правила скасування", C.accent3],
+    ["$0,99–2", "платить бізнес за одне AI-рішення в Intercom і Zendesk", C.accent1],
+  ];
+  const msw = (W - 2 * M - 0.9) / 4;
+  mstats.forEach(([big, text, color], i) => {
+    const x = M + i * (msw + 0.3);
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.35, w: msw, h: 1.35, rectRadius: 0.12, fill: { color: C.background2 }, line: { type: "none" }, objectName: `market stat ${i}` });
+    s.addText(big, { x: x + 0.25, y: 1.45, w: msw - 0.5, h: 0.62, fontSize: 30, bold: true, color, margin: 0, isTextBox: true, objectName: `market stat ${i} value` });
+    s.addText(text, { x: x + 0.25, y: 2.08, w: msw - 0.5, h: 0.55, fontSize: 12, color: C.text2, margin: 0, valign: "top", isTextBox: true, objectName: `market stat ${i} label` });
+  });
+  const th = (t, hi) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: hi ? C.accent1 : C.text2 }, align: "center" } });
+  const tl = (t) => ({ text: t, options: { bold: true, color: C.text1 } });
+  const yes = (t = "так") => ({ text: t, options: { color: C.accent3, bold: true, align: "center" } });
+  const mid = (t) => ({ text: t, options: { color: C.accent4, align: "center" } });
+  const nope = (t) => ({ text: t, options: { color: C.accent5, align: "center" } });
+  const us = (t) => ({ text: t, options: { color: C.accent3, bold: true, align: "center", fill: { color: C.background2 } } });
+  s.addTable([
+    [th("", false), th("Bookly", true), th("Fresha AI Concierge", false), th("Booksy", false), th("Intercom Fin / Zendesk AI", false)],
+    [tl("Сам переносить і скасовує записи"), us("так"), yes(), nope("лише сторонні сервіси"), mid("через власні інтеграції")],
+    [tl("Правила бізнесу: передоплата, штраф, виняток"), us("так, у кожного свої"), nope("не заявлено"), nope("ні"), mid("треба налаштовувати")],
+    [tl("Ризикові дії — з погодженням людини"), us("так, налаштовує власник"), nope("не заявлено"), nope("ні"), mid("частково")],
+    [tl("Для салонів і клінік з коробки"), us("так"), yes("салони й спа"), nope("—"), nope("ні, загальний helpdesk")],
+    [tl("Ціна AI"), us("за підпискою"), mid("$99,95 / міс за локацію"), nope("—"), mid("$0,99–2 за рішення + місця")],
+  ], { x: M, y: 2.95, w: W - 2 * M, colW: [3.5, 2.05, 2.2, 1.9, 2.48], fontSize: 13, rowH: 0.52, border: { type: "solid", color: HEX.lt2, pt: 1 }, fill: { color: HEX.lt1 }, valign: "middle", margin: [0, 0.08, 0, 0.08], objectName: "competitors table" });
+  s.addText("Джерела: SchedulingKit і Square (неявки, оцінки вендорів), сайт Fresha та огляди 2026, огляди цін Intercom і Zendesk 2026. «Не заявлено» — у відкритих описах продукту такої функції немає.", { x: M, y: 6.55, w: W - 2 * M - 0.7, h: 0.45, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true, objectName: "market sources" });
+  s.addNotes("Ринок: у салонах близько 20% записів — неявки, це в середньому $3 600 втрат на місяць. Передоплата й чіткі правила скасування знижують неявки майже вдвічі — саме їх наш агент і застосовує автоматично. Конкуренти: Fresha вже має AI-консьєржа, але без налаштовуваних правил і погоджень; у Booksy власного AI-агента немає; Intercom Fin і Zendesk — загальні helpdesk-и, де за кожне рішення платять $0,99–2 і все треба інтегрувати самому. Ми — вертикальне рішення для бізнесів за записом, де AI діє за правилами власника. Цифри — оцінки вендорів, джерела внизу слайда.");
+
   // 4. How it works ----------------------------------------------------------
   pres.addSection({ title: "Як це працює" });
   s = pres.addSlide({ masterName: "Content", sectionTitle: "Як це працює" });
@@ -294,43 +327,18 @@ async function main() {
   });
   s.addNotes("Під агентом — працююча платформа: мульти-тенант, PostgreSQL, Docker, 119 тестів бекенду. Будь-який салон чи клініка реєструється, налаштовує правила — і AI-підтримка працює одразу. Відео: presentation/videos/product-tour.mp4");
 
-  // Impact and criteria ------------------------------------------------------
-  s = pres.addSlide({ masterName: "Content", sectionTitle: "Чому це працює" });
-  s.addText("Що отримує підтримка і як ми закриваємо критерії", { placeholder: "title" });
-  const stats = [
-    ["3 з 3", "сценаріїв вирішено діями в системі, а не лише відповіддю", C.accent1],
-    ["1 клік", "щоб адміністратор погодив ризикову дію з готовим розбором", C.accent4],
-    ["1 700 грн", "передоплат збережено або повернено клієнтам у демо", C.accent3],
-  ];
-  const stw = (W - 2 * M - 0.6) / 3;
-  stats.forEach(([big, text, color], i) => {
-    const x = M + i * (stw + 0.3);
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.4, w: stw, h: 1.6, rectRadius: 0.12, fill: { color: C.background2 }, line: { type: "none" }, objectName: `stat ${i}` });
-    s.addText(big, { x: x + 0.3, y: 1.5, w: stw - 0.6, h: 0.75, fontSize: 40, bold: true, color, margin: 0, isTextBox: true, objectName: `stat ${i} value` });
-    s.addText(text, { x: x + 0.3, y: 2.28, w: stw - 0.6, h: 0.65, fontSize: 13, color: C.text2, margin: 0, valign: "top", isTextBox: true, objectName: `stat ${i} label` });
-  });
-  const crit = [
-    ["Operational Impact", "Звернення закриваються діями в системі; людина — лише для ризикових рішень"],
-    ["Innovation", "Permission engine, який налаштовує власник, і один агент для будь-якого бізнесу"],
-    ["Use of AI", "Оркестратор Claude Sonnet, Gemma 4 для простих питань, агент з інструментами"],
-    ["Reasoning & Context", "Рішення залежить від історії клієнта, правил бізнесу та емоції звернення"],
-    ["Presentation & Demo", "Працюючий продукт: сайт, адмінка, API, MCP, телефон — усе на відео"],
-  ];
-  crit.forEach(([head, text], i) => {
-    const y = 3.3 + i * 0.72;
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M, y, w: W - 2 * M, h: 0.62, rectRadius: 0.1, fill: { color: i % 2 ? C.background1 : C.background2 }, line: { type: "none" }, objectName: `criterion ${i}` });
-    s.addText(head, { x: M + 0.3, y, w: 3.2, h: 0.62, fontSize: 16, bold: true, color: C.accent1, valign: "middle", margin: 0, isTextBox: true, objectName: `criterion ${i} name` });
-    s.addText(text, { x: M + 3.6, y, w: W - 2 * M - 3.9, h: 0.62, fontSize: 15, color: C.text1, valign: "middle", margin: 0, isTextBox: true, objectName: `criterion ${i} text` });
-  });
-  s.addNotes("Цифри з демо: 500 грн Олени і 400 грн Максима збережено, 800 грн Петру повернено. Адміністратор не робить рутину руками, а лише погоджує те, що справді потребує людини. Далі коротко по п'яти критеріях з ТЗ. Прості питання (ціна, адреса) закриває Gemma 4 без дій — відео scene-Q.mp4 є як запасне.");
-
   // 13. Closing --------------------------------------------------------------
   pres.addSection({ title: "Підсумок" });
   s = pres.addSlide({ masterName: "Dark Title", sectionTitle: "Підсумок" });
   s.addText("Дякуємо!", { placeholder: "title" });
   s.addText("Далі: інтеграція з календарями й CRM салонів, SMS-нагадування, прогноз неявок і передоплата для ризикових клієнтів", { placeholder: "body" });
-  s.addText("github.com/redrembo24680/polytech_hack", { x: M, y: 6.3, w: 9, h: 0.4, fontSize: 16, color: C.accent6, margin: 0, isTextBox: true, objectName: "repo" });
-  s.addNotes("Підсумок: AI тут не інтерфейс спілкування, а учасник операцій. Наступні кроки — інтеграції й прогнозування неявок на даних, які платформа вже збирає.");
+  [["3 з 3", "сценаріїв вирішено діями"], ["1 клік", "на погодження ризикової дії"], ["1 700 грн", "передоплат збережено або повернено"]].forEach(([big, text], i) => {
+    const x = M + i * 3.3;
+    s.addText(big, { x, y: 5.4, w: 3.0, h: 0.6, fontSize: 30, bold: true, color: C.background1, margin: 0, isTextBox: true, objectName: `closing stat ${i}` });
+    s.addText(text, { x, y: 6.0, w: 3.0, h: 0.45, fontSize: 13, color: C.accent6, margin: 0, isTextBox: true, objectName: `closing stat ${i} label` });
+  });
+  s.addText("github.com/redrembo24680/polytech_hack", { x: M, y: 6.85, w: 9, h: 0.4, fontSize: 16, color: C.accent6, margin: 0, isTextBox: true, objectName: "repo" });
+  s.addNotes("Цифри з демо: 500 грн Олени і 400 грн Максима збережено, 800 грн Петру повернено. Критерії: Operational Impact — звернення закриваються діями, людина лише для ризикових рішень; Innovation — permission engine, який налаштовує власник; Use of AI — оркестратор Claude Sonnet, Gemma 4, агент з інструментами; Reasoning & Context — рішення залежить від історії клієнта й правил бізнесу; Demo — працюючий продукт. Підсумок: AI тут не інтерфейс спілкування, а учасник операцій. Наступні кроки — інтеграції й прогнозування неявок на даних, які платформа вже збирає.");
 
   const out = path.join(__dirname, "Bookly-pitch.pptx");
   await pres.writeFile({ fileName: out });
