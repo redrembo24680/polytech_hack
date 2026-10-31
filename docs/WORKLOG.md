@@ -42,3 +42,8 @@
   devrelay-offers дивимось, які API-кредити дає спонсор — від цього залежить SDK агента.
 - Спека агента: додано межу `llm.py` (провайдер-агностичний tool-loop), провайдер і модель
   через env; фінальний вибір після перевірки спонсорських кредитів у DevRelay.
+- DevRelay login ок (MLH: Hacktoberfest Hack Day Lviv, checked in; DEV: @stasblack31).
+  Офферів/промокодів на івенті немає. Sponsor skill: DigitalOcean App Platform (Gradient AI).
+  Челенджі івенту: **Best Use of Gemma 4** (відкрита модель через Gemini API) і **Best Open-Source
+  AI Project**. Висновок: LLM — Gemma 4 / Gemini через безкоштовний тір Gemini API (або локально
+  через Ollama), це закриває обидва додаткові призи. Перевіряємо tool calling у Gemma 4.
