@@ -157,7 +157,7 @@ def build_server(api_url: str, http: httpx.AsyncClient | None = None) -> FastMCP
 
     @mcp.tool
     async def send_message(
-        tenant_id: str, client_id: str, text: str, channel: Literal["chat", "sms", "email"] = "chat",
+        tenant_id: str, client_id: str, text: str, channel: Literal["chat", "sms"] = "chat",
     ) -> Any:
         """Send an outgoing message to the client (stored in the message log; default channel chat).
         Call to confirm an action you took or to notify the client. Does not change bookings. The API only checks data integrity, NOT business policy or agent permissions: checking the tenant's policy and agent_permissions before calling is the agent's responsibility.
@@ -168,7 +168,7 @@ def build_server(api_url: str, http: httpx.AsyncClient | None = None) -> FastMCP
     @mcp.tool
     async def create_ticket(
         tenant_id: str, client_id: str, summary: str,
-        priority: Literal["low", "normal", "high"] = "normal",
+        priority: Literal["low", "normal", "high", "urgent"] = "normal",
     ) -> Any:
         """Escalate to a human: create a support ticket for the client with a short summary. Call when the
         request is outside your permissions or policy forbids it. Creates a new open ticket; changes no
