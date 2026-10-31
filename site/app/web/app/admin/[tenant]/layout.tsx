@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { api, ApiError } from "@/lib/api-core";
 import type { Tenant } from "@/lib/types";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { AgentApprovals } from "@/components/admin/AgentApprovals";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,10 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/ad
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       <AdminNav tenant={tenant} tenantName={t.name} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1">
+        <AgentApprovals tenant={tenant} />
+        {children}
+      </div>
     </div>
   );
 }
