@@ -8,3 +8,5 @@ node_modules/
 .pytest_cache/
 support-agent/.venv/
 site/demo-video/videos/
+presentation/node_modules/
+presentation/render/
