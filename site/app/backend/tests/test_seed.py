@@ -1,7 +1,10 @@
 from collections import defaultdict
 from datetime import timedelta
 
-from booking.models import Booking, Client, Service, Staff, StaffService, Tenant
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from booking.models import Booking, Client, Service, Staff, StaffSchedule, StaffService, Tenant
 from booking.phone import normalize_phone
 from booking.schemas import booking_out, client_out
 from booking.seed import reset
@@ -85,7 +88,7 @@ def test_seed_no_overlaps_and_low_occupancy(session):
     horizon = NOW + timedelta(days=7)
     for stid, bs in by_staff.items():
         mins = sum((b.end - b.start).total_seconds() / 60 for b in bs if NOW < b.start <= horizon)
-        assert mins <= 0.5 * 6 * 9 * 60
+        assert mins <= 0.5 * 7 * 9 * 60
     # Maria's 11:00 tomorrow is free
     assert not any(b.start == NOW.replace(day=3, hour=11) for b in by_staff["maria"])
 
@@ -106,3 +109,16 @@ def test_seed_is_deterministic(session):
     ids2 = sorted(b.id for b in session.query(Booking))
     snap2 = sorted((b.id, b.start, b.staff_id, b.client_id) for b in session.query(Booking))
     assert ids1 == ids2 and snap1 == snap2
+
+
+def test_reset_on_weekend_clock(session):
+    for now in (datetime(2026, 10, 31, 8, tzinfo=ZoneInfo("Europe/Kyiv")),
+                datetime(2026, 11, 1, 8, tzinfo=ZoneInfo("Europe/Kyiv"))):
+        reset(session, now)
+        b = session.get(Booking, "b-olena-1")
+        sched = {r.weekday: r for r in session.query(StaffSchedule).filter_by(staff_id="maria")}
+        ks, ke = b.start.astimezone(ZoneInfo("Europe/Kyiv")), b.end.astimezone(ZoneInfo("Europe/Kyiv"))
+        assert ks.hour == 10 and ks.date() == (now + timedelta(days=1)).date()
+        row = sched[ks.weekday()]
+        assert row.start_time <= ks.time() and ke.time() <= row.end_time
+        assert len(sched) == 7

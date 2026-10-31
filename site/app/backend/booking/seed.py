@@ -172,16 +172,16 @@ class _Seeder:
         """Add `n` past bookings 31..180 days ago (or one on fixed_day) in free slots."""
         last = None
         for _ in range(n):
-            while True:
+            for _attempt in range(5000):
                 d = fixed_day or self.today - timedelta(days=self.rng.randint(31, 180))
-                if d.weekday() == 6:
-                    continue
                 sv = self.svc[service]
                 start = self.rng.choice(self.grid(tenant, d, sv.duration_min))
                 staff = self.rng.choice(self.staff_for(tenant, service))
                 end = start + timedelta(minutes=sv.duration_min)
                 if self.free([("s", staff), ("c", client)], start, end):
                     break
+            else:
+                raise RuntimeError(f"seed: no free slot for {client}")
             last = self.add_booking(self.next_id(tenant), tenant, client, staff, service,
                                     start, status, fee=fee, notes=notes)
         return last
@@ -206,7 +206,7 @@ class _Seeder:
                 s.add(Staff(id=stid, tenant_id=tid, name=name,
                             services=[self.svc[x] for x in svs]))
                 s.flush()
-                for wd in range(6):  # Mon-Sat
+                for wd in range(7):  # every day
                     s.add(StaffSchedule(staff_id=stid, weekday=wd,
                                         start_time=spec["hours"][0], end_time=spec["hours"][1]))
             s.flush()
@@ -266,16 +266,14 @@ class _Seeder:
             for stid, _, svs in spec["staff"]:
                 for off in range(1, 30):
                     d = self.today - timedelta(days=off)
-                    if d.weekday() == 6:
-                        continue
                     for _ in range(self.rng.randint(1, 3)):
                         self._try_place(tid, stid, svs, clients, d, past=True)
                 # future 7 days: keep occupancy low
-                avail = 6 * (spec["hours"][1].hour - spec["hours"][0].hour) * 60
+                avail = 7 * (spec["hours"][1].hour - spec["hours"][0].hour) * 60
                 used = 0
                 for _ in range(self.rng.randint(5, 8)):
                     d = self.today + timedelta(days=self.rng.randint(0, 6))
-                    if d.weekday() == 6 or (stid, d) in self.demo_days:
+                    if (stid, d) in self.demo_days:
                         continue
                     used += self._try_place(tid, stid, svs, clients, d, past=False, cap=(avail * 0.35 - used))
 
