@@ -53,3 +53,7 @@
 - Рішення: DevRelay-кредити не чекаємо. Написано план `docs/superpowers/plans/2026-10-31-support-agent.md`
   (11 задач, 9 основних + 2 stretch). Виконання: subagent-driven-development, TDD, субагенти на Sonnet,
   оркестратор — ця сесія.
+- Імплементація (гілка `feat/agent`, SDD: Sonnet-імплементер → Sonnet/Haiku-рев'юер на кожну задачу):
+  - Task 1 ✅ models + seed.json + MemoryDataSource (19 тестів). Фікс: укр. повідомлення помилок, валідація reschedule.
+  - Task 2 ✅ permission engine `policy.py` (40 тестів). Фікс: refund без суми → апрув, невідомий режим → ValueError (fail-closed).
+  - Task 3 ✅ EventLog / ApprovalStore / metrics (46 тестів). Фікс: locks для threadpool.
