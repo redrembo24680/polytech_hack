@@ -60,3 +60,5 @@
   - Task 4 ✅ tools з policy gating (69 тестів). Фікс: перевірка власника бронювання, валідація аргументів per-tool, registry ніколи не кидає.
   - Task 5 ✅ LLM-адаптер: GeminiClient (google-genai 2.34) + FakeClient (74 тестів), без правок.
   - Task 6 ✅ agent loop + системний промпт + Session + execute_approved (83 тестів). Фікс: перевірка статусу апруву, never-raises.
+  - Task 7 ✅ FastAPI: sessions, messages, events, approvals/decide, metrics, static web (96 тестів). Фікс: виконання апруву під локом сесії, плоскі помилки, контракт при збої після виконання.
+  - Відкрито: dev-залежність `httpx2` (прибирає попередження Starlette у тестах) — інсталяцію субагенту заблокував permission-класифікатор; рішення за користувачем (`uv add --dev httpx2`).
