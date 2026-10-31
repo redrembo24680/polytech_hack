@@ -47,6 +47,7 @@ export const EVENT_LABEL: Record<string, string> = {
   prepayment_forfeited: "Передоплату втрачено",
   no_show_fee_charged: "Штраф нараховано",
   no_show_fee_waived: "Штраф знято",
+  no_show_waived: "Штраф знято",
   goodwill: "Виняток з доброї волі",
 };
 

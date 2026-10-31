@@ -1,0 +1,18 @@
+{
+  "page /admin/[tenant]": "app/web/app/admin/[tenant]/page.tsx:AdminBookingsPage",
+  "layout /admin/[tenant]": "app/web/app/admin/[tenant]/layout.tsx:AdminLayout",
+  "page /admin/[tenant]/clients": "app/web/app/admin/[tenant]/clients/page.tsx",
+  "page /admin/[tenant]/staff": "app/web/app/admin/[tenant]/staff/page.tsx:StaffPage",
+  "page /admin/[tenant]/services": "app/web/app/admin/[tenant]/services/page.tsx",
+  "page /admin/[tenant]/settings": "app/web/app/admin/[tenant]/settings/page.tsx:SettingsPage",
+  "page /admin/[tenant]/support": "app/web/app/admin/[tenant]/support/page.tsx:SupportPage",
+  "component BookingWeek": "app/web/components/admin/BookingWeek.tsx:BookingWeek",
+  "component BookingCard": "app/web/components/admin/BookingCard.tsx:BookingCard",
+  "component SettingsPanel": "app/web/components/admin/SettingsPanel.tsx:SettingsPanel",
+  "component PolicyForm": "app/web/components/admin/PolicyForm.tsx:PolicyForm",
+  "component SupportInbox": "app/web/components/admin/SupportInbox.tsx:SupportInbox",
+  "component ConversationList": "app/web/components/admin/ConversationList.tsx:ConversationList",
+  "component ConversationView": "app/web/components/admin/ConversationView.tsx:ConversationView",
+  "component TicketList": "app/web/components/admin/TicketList.tsx:TicketList",
+  "component MessageLog": "app/web/components/admin/MessageLog.tsx:MessageLog"
+}
