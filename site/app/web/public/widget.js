@@ -18,12 +18,12 @@
   var root = css(document.createElement('div'), 'position:fixed;right:20px;bottom:20px;z-index:' + Z + ';font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;');
   root.id = 'bookly-widget-root';
 
-  var panel = css(document.createElement('div'), 'display:none;position:absolute;right:0;bottom:72px;width:380px;height:600px;max-height:calc(100vh - 100px);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);overflow:hidden;');
+  var panel = css(document.createElement('div'), 'display:none;position:absolute;right:0;bottom:72px;width:380px;height:600px;max-height:calc(100vh - 140px);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);');
   panel.id = 'bookly-widget-panel';
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Підтримка');
 
-  var closeBtn = css(document.createElement('button'), 'position:absolute;top:8px;right:8px;z-index:2;width:30px;height:30px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:18px;line-height:30px;padding:0;cursor:pointer;');
+  var closeBtn = css(document.createElement('button'), 'position:absolute;top:-38px;right:0;z-index:2;width:30px;height:30px;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:18px;line-height:30px;padding:0;cursor:pointer;');
   closeBtn.id = 'bookly-widget-close';
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Закрити');
@@ -54,16 +54,20 @@
       css(root, 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:' + Z + ';font-family:system-ui,sans-serif;');
       css(panel, 'display:block;position:absolute;left:0;top:0;width:100%;height:100%;background:#fff;border-radius:0;overflow:hidden;');
       btnWrap.style.display = 'none';
+      closeBtn.style.top = '8px';
+      closeBtn.style.right = '8px';
     } else {
       css(root, 'position:fixed;right:20px;bottom:20px;z-index:' + Z + ';font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;');
-      css(panel, 'display:' + (isOpen ? 'block' : 'none') + ';position:absolute;right:0;bottom:72px;width:380px;height:600px;max-height:calc(100vh - 100px);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);overflow:hidden;');
+      css(panel, 'display:' + (isOpen ? 'block' : 'none') + ';position:absolute;right:0;bottom:72px;width:380px;height:600px;max-height:calc(100vh - 140px);background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);');
       btnWrap.style.display = 'flex';
+      closeBtn.style.top = '-38px';
+      closeBtn.style.right = '0';
     }
   }
 
   function open() {
     if (!iframe) {
-      iframe = css(document.createElement('iframe'), 'width:100%;height:100%;border:0;display:block;');
+      iframe = css(document.createElement('iframe'), 'width:100%;height:100%;border:0;display:block;border-radius:16px;');
       iframe.id = 'bookly-widget-frame';
       iframe.title = 'Підтримка';
       iframe.src = origin + '/b/' + encodeURIComponent(tenant) + '/support?embed=1';
