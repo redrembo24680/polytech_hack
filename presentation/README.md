@@ -1,7 +1,7 @@
 # Презентація для журі
 
 - `Bookly-pitch.pptx` — 10 слайдів, структура під критерії з ТЗ (Operational Impact, Innovation, Use of AI, Reasoning & Context, Presentation & Demo). Нотатки доповідача є на кожному слайді.
-- `videos/` — відео під слайди: `scene-Q/A/B/C.mp4` (чат клієнта і copilot поруч, синхронно), `product-tour.mp4`.
+- `videos/` — відео під слайди: `scene-A/B/C.mp4` (чат клієнта і copilot поруч, синхронно), `product-tour.mp4`.
 
 ## Як вставити відео в Google Slides (≈2 хв)
 Google Slides не імпортує відео з .pptx, тому на слайдах стоять кадри-обкладинки з написом «▶ вставити …».
@@ -17,8 +17,6 @@ Google Slides не імпортує відео з .pptx, тому на слай�
 | 6. Демо 2. Максим | `scene-B.mp4` |
 | 7. Демо 3. Петро | `scene-C.mp4` |
 | 9. Справжній продукт | `product-tour.mp4` |
-
-`scene-Q.mp4` (просте питання → відповідає Gemma 4) у слайди не увійшло, лишається як запасне.
 
 Порада: завантажте `videos/` ще й на ноутбук для показу — якщо на сцені не буде інтернету, Google Slides відео з Drive не програє.
 

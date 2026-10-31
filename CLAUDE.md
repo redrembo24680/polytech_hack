@@ -16,7 +16,7 @@
 3. **Документація по кожній спеці ведеться за конвенцією нижче: `docs/features/<фіча>/` з
    10 файлами.** Спека — джерело рішень; папка фічі — живий опис того, що реально в коді.
    Папку створюємо разом зі спекою, файли заповнюємо під час імплементації, а не після.
-   Поточні фічі: `docs/features/support-agent/`, `docs/features/booking-platform/`.
+   Поточні фічі: `docs/features/support-agent/` (агент), `site/docs/features/*` (платформа бронювань).
 4. Мова документації: українська, технічні терміни англійською.
 
 ## Конвенція документації фіч (docs/features/<фіча>/ — 10 файлів)
@@ -45,5 +45,5 @@ Operational Impact · Innovation · Use of AI · Reasoning & Context Handling ·
 
 ## Структура репо
 - `support-agent/` — наш агент (Python/uv: `agent/`, `web/`, `tests/`, `scripts/`). Усі команди з цієї папки; тести: `cd support-agent && uv run pytest -q`.
-- `app/` — платформа бронювань тіммейта (ще не додана).
+- `site/` — платформа бронювань (бекенд, MCP, сайт), див. `site/README.md`.
 - `docs/` — спільні спеки, плани, WORKLOG, feature docs.
