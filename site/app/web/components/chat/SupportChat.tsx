@@ -7,21 +7,32 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { MessageBubble, TypingIndicator } from "./MessageBubble";
 import { StartForm } from "./StartForm";
+import { OtpStep } from "./OtpStep";
 
 const POLL_MS = 2000;
+// Demo-only: the code is a client-side constant. A real deployment would use an SMS gateway
+// and verify the code server-side.
+const SMS_DEMO_CODE = process.env.NEXT_PUBLIC_SMS_DEMO_CODE ?? "1234";
 const storageKey = (tenant: string) => `support:${tenant}`;
 
-function readStored(tenant: string): string | null {
+function readStored(tenant: string): { conversationId: string; verified: boolean } | null {
   try {
     const raw = localStorage.getItem(storageKey(tenant));
-    return raw ? (JSON.parse(raw).conversationId ?? null) : null;
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    if (!j.conversationId) return null;
+    return { conversationId: j.conversationId, verified: j.verified === 1 };
   } catch {
     return null;
   }
 }
-function writeStored(tenant: string, conversationId: string | null) {
+function writeStored(tenant: string, conversationId: string | null, verified = false) {
   try {
-    if (conversationId) localStorage.setItem(storageKey(tenant), JSON.stringify({ conversationId }));
+    if (conversationId)
+      localStorage.setItem(
+        storageKey(tenant),
+        JSON.stringify(verified ? { conversationId, verified: 1 } : { conversationId }),
+      );
     else localStorage.removeItem(storageKey(tenant));
   } catch {
     /* storage unavailable */
@@ -39,9 +50,10 @@ function merge(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
 export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean }) {
   const base = `/api/tenants/${tenant}/support/conversations`;
 
-  const [phase, setPhase] = useState<"loading" | "form" | "chat" | "retry">("loading");
+  const [phase, setPhase] = useState<"loading" | "form" | "otp" | "chat" | "retry">("loading");
   const [attempt, setAttempt] = useState(0);
   const [convId, setConvId] = useState<string | null>(null);
+  const [otpTarget, setOtpTarget] = useState<{ clientId: string; phone: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Optimistic client messages awaiting the POST response; rendered after server messages.
   const [pending, setPending] = useState<ChatMessage[]>([]);
@@ -68,7 +80,8 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
     let cancelled = false;
     (async () => {
       setPhase("loading");
-      const id = readStored(tenant);
+      const stored = readStored(tenant);
+      const id = stored?.conversationId;
       if (!id) {
         setPhase("form");
         return;
@@ -80,7 +93,22 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
         if (cancelled) return;
         setConvId(id);
         setMessages(msgs);
-        setPhase("chat");
+        if (!stored.verified && conv.client_id && msgs.length === 0) {
+          // Started but never confirmed the code: back to the code step.
+          const phone = conv.visitor_phone ?? "";
+          setOtpTarget({ clientId: conv.client_id, phone });
+          await api
+            .post(`/api/tenants/${tenant}/messages`, {
+              client_id: conv.client_id,
+              channel: "sms",
+              text: `Код підтвердження для чату підтримки: ${SMS_DEMO_CODE}`,
+            })
+            .catch(() => undefined);
+          if (cancelled) return;
+          setPhase("otp");
+        } else {
+          setPhase("chat");
+        }
       } catch (e) {
         if (cancelled) return;
         if (e instanceof ApiError && (e.status === 404 || e.status === 405 || e.code === "closed")) reset();
@@ -131,20 +159,42 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
     };
   }, [phase, convId, base, reset]);
 
+  async function sendCode(clientId: string) {
+    await api.post(`/api/tenants/${tenant}/messages`, {
+      client_id: clientId,
+      channel: "sms",
+      text: `Код підтвердження для чату підтримки: ${SMS_DEMO_CODE}`,
+    });
+  }
+
   async function start(name: string, phone: string) {
     setStarting(true);
     setError(null);
     try {
       const conv = await api.post<Conversation>(base, { client_name: name, client_phone: phone });
-      writeStored(tenant, conv.id);
       setConvId(conv.id);
       setMessages([]);
-      setPhase("chat");
+      if (conv.client_id) {
+        // Known client: SMS a code first. Unknown phone: nobody to SMS, open the chat
+        // (the agent will ask for the phone).
+        await sendCode(conv.client_id);
+        writeStored(tenant, conv.id, false);
+        setOtpTarget({ clientId: conv.client_id, phone });
+        setPhase("otp");
+      } else {
+        writeStored(tenant, conv.id, true);
+        setPhase("chat");
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Не вдалося почати чат");
     } finally {
       setStarting(false);
     }
+  }
+
+  function verified() {
+    if (convId) writeStored(tenant, convId, true);
+    setPhase("chat");
   }
 
   async function send() {
@@ -215,6 +265,15 @@ export function SupportChat({ tenant, embed }: { tenant: string; embed: boolean 
         </div>
       )}
       {phase === "form" && <StartForm onStart={start} busy={starting} error={error} />}
+      {phase === "otp" && otpTarget && (
+        <OtpStep
+          phone={otpTarget.phone}
+          expected={SMS_DEMO_CODE}
+          onVerified={verified}
+          onResend={() => sendCode(otpTarget.clientId).catch(() => undefined)}
+          onCancel={reset}
+        />
+      )}
       {phase === "chat" && (
         <>
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">

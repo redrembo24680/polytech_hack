@@ -34,6 +34,15 @@ SCENES = {
 }
 
 
+TOOL_LABELS = {
+    "apply_goodwill_exception": "Виняток: зберегти передоплату",
+    "refund_prepayment": "Повернення передоплати",
+    "cancel_booking": "Скасування запису",
+    "reschedule_booking": "Перенесення запису",
+    "waive_no_show_fee": "Зняти штраф за неявку",
+}
+
+
 class DemoError(Exception):
     pass
 
@@ -101,7 +110,7 @@ def wait_reply(page: Page, base: int, what: str = "відповідь агент
     return last
 
 
-def open_customer(page: Page, site: str, sc: dict) -> None:
+def open_customer(page: Page, site: str, sc: dict, otp: str = "1234") -> None:
     page.goto(f"{site}/b/{sc['tenant']}/support")
     page.evaluate("localStorage.clear()")
     page.reload()
@@ -110,6 +119,15 @@ def open_customer(page: Page, site: str, sc: dict) -> None:
         type_human(page, page.get_by_label("Ім'я"), sc["name"])
         type_human(page, page.get_by_label("Телефон"), sc["phone"])
         page.get_by_role("button", name="Почати чат").click()
+        code_input = page.get_by_label("Код з SMS")
+        try:
+            code_input.wait_for(timeout=5_000)  # крок SMS-коду у стартовій формі сайту
+            page.wait_for_timeout(1500)
+            type_human(page, code_input, otp)
+            page.wait_for_timeout(800)
+            page.get_by_role("button", name="Підтвердити").click()
+        except PWTimeout:
+            pass  # кроку коду немає (невідомий номер або вимкнено)
         page.locator("textarea[aria-label='Повідомлення']").wait_for(timeout=15_000)
     except PWTimeout:
         raise DemoError("Не вдалося відкрити чат підтримки на сайті (форма імені/телефону)") from None
@@ -127,6 +145,31 @@ def open_copilot(page: Page, agent: str, sc: dict) -> None:
         page.wait_for_timeout(1500)
     except PWTimeout:
         raise DemoError("Copilot не завантажився: перевірте, що агент запущено на --agent") from None
+
+
+def open_admin_site(page: Page, site: str, sc: dict) -> None:
+    page.goto(f"{site}/admin/{sc['tenant']}")
+    try:
+        page.get_by_text("Погодження дій агента").first.wait_for(timeout=20_000)
+    except PWTimeout:
+        raise DemoError("Адмінка сайту не завантажилась (панель «Погодження дій агента»)") from None
+    page.wait_for_timeout(1500)
+
+
+def approve_site(adm: Page, tool: str, note: str | None, cust: Page) -> int:
+    label = TOOL_LABELS.get(tool, tool)
+    card = adm.locator("li").filter(has_text=label).first
+    try:
+        card.wait_for(timeout=REPLY_TIMEOUT)
+    except PWTimeout:
+        raise DemoError(f"Не з'явилась картка апруву {label} в адмінці сайту") from None
+    adm.wait_for_timeout(3000)
+    if note:
+        type_human(adm, card.locator("input"), note)
+    base = agent_count(cust)
+    card.get_by_role("button", name="Схвалити").click()
+    adm.wait_for_timeout(2500)
+    return base
 
 
 def attach_copilot(cop: Page, cust: Page, sc: dict) -> None:
@@ -197,11 +240,15 @@ def run_scene(scene: str, args, browser) -> None:
             place(cust, 0)
             place(cop, 780)
         try:
-            open_copilot(cop, args.agent, sc)
-            open_customer(cust, args.site, sc)
+            site_admin = args.admin == "site"
+            if site_admin:
+                open_admin_site(cop, args.site, sc)
+            else:
+                open_copilot(cop, args.agent, sc)
+            open_customer(cust, args.site, sc, args.otp)
             base = send_message(cust, sc["msg"])
             deadline = time.time() + 30
-            while True:  # сесія агента з'являється після першого повідомлення
+            while not site_admin:  # сесія агента з'являється після першого повідомлення
                 try:
                     attach_copilot(cop, cust, sc)
                     break
@@ -209,6 +256,7 @@ def run_scene(scene: str, args, browser) -> None:
                     if time.time() > deadline:
                         raise
                     time.sleep(1)
+            appr = (lambda t, n: approve_site(cop, t, n, cust)) if site_admin else (lambda t, n: approve(cop, t, n, cust))
             first = wait_reply(cust, base)
             if "SMS" in first or "код підтвердження" in first:
                 code = sms_code(cust, args.agent, sc, args.otp)
@@ -220,12 +268,12 @@ def run_scene(scene: str, args, browser) -> None:
                 base = send_message(cust, "1")
                 wait_reply(cust, base, "підтвердження перенесення")
             elif scene == "B":
-                base = approve(cop, "apply_goodwill_exception", "ок, один раз", cust)
+                base = appr("apply_goodwill_exception", "ок, один раз")
                 wait_reply(cust, base, "повідомлення агента після апруву")
             elif scene == "C":
-                base = approve(cop, "refund_prepayment", None, cust)
+                base = appr("refund_prepayment", None)
                 wait_reply(cust, base, "повідомлення агента після апруву повернення")
-                base = approve(cop, "cancel_booking", None, cust)
+                base = appr("cancel_booking", None)
                 wait_reply(cust, base, "фінальне підтвердження скасування", contains="скасован")
             log(f"[{scene}] сцену записано")
         except Exception as e:
@@ -238,7 +286,7 @@ def run_scene(scene: str, args, browser) -> None:
                 pass
     finally:
         paths = {}
-        for name, ctx in (("customer", cust_ctx), ("copilot", cop_ctx)):
+        for name, ctx in (("customer", cust_ctx), (("admin" if args.admin == "site" else "copilot"), cop_ctx)):
             if ctx is None:
                 continue
             vids = [p.video for p in ctx.pages if p.video]
@@ -251,7 +299,7 @@ def run_scene(scene: str, args, browser) -> None:
             log(f"    {dst}")
             if args.mp4:
                 mp4 = dst.with_suffix(".mp4")
-                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(dst), str(mp4)], check=False)
+                subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(dst), "-crf", "26", str(mp4)], check=False)
                 log(f"    {mp4}")
         shutil.rmtree(out / ".tmp", ignore_errors=True)
 
@@ -266,6 +314,7 @@ def main() -> int:
     ap.add_argument("--site", default="http://localhost:3000")
     ap.add_argument("--site-api", default="http://localhost:8001")
     ap.add_argument("--agent", default="http://localhost:8000")
+    ap.add_argument("--admin", choices=["site", "copilot"], default="site", help="друге вікно: адмінка сайту або copilot")
     ap.add_argument("--otp", default="1234", help="код SMS, якщо його немає в подіях агента")
     ap.add_argument("--no-reset", action="store_true")
     ap.add_argument("--slang", action="store_true", help="сцена A: розмовна фраза")
