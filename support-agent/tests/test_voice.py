@@ -81,3 +81,30 @@ def test_build_assistant_payload():
     assert tools[0]["server"]["url"] == "https://x.ngrok.app/voice/tools"
     assert p["transcriber"]["language"] == "uk"
     assert p["voice"]["voiceId"].startswith("uk-UA") and p["serverMessages"] == ["tool-calls"]
+
+
+def test_web_call_without_number_needs_identify():
+    import json
+    c, _ = make()
+
+    def call(name, args=None):
+        b = body("", name, args)
+        b["message"]["call"] = {"id": "call-1", "customer": {}}
+        return c.post("/voice/tools", json=b).json()["results"][0]["result"]
+
+    assert "назвіть номер" in call("get_client_profile")
+    assert "не знайдено" in call("identify_caller", {"phone": "0990000000"})
+    assert "назвіть номер" in call("get_client_profile")
+    ok = json.loads(call("identify_caller", {"phone": "050 111 00 01"}))
+    assert ok["status"] == "identified"
+    assert '"visits_count": 12' in call("get_client_profile")
+
+
+def test_vapi_setup_includes_identify_caller():
+    spec = importlib.util.spec_from_file_location(
+        "vapi_setup2", Path(__file__).resolve().parent.parent / "scripts" / "vapi_setup.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    from agent.voice import voice_registry
+    names = [d["name"] for d in voice_registry([]).declarations()]
+    assert "identify_caller" in names

@@ -11,7 +11,7 @@ from pathlib import Path
 API = "https://api.vapi.ai"
 
 SYSTEM_PROMPT = """Ти голосовий асистент підтримки салону. Говори українською, коротко й ввічливо.
-- Привітайся (перше повідомлення вже озвучено). Клієнта вже ідентифіковано за номером, з якого він телефонує: не питай номер чи ідентифікатори.
+- Привітайся (перше повідомлення вже озвучено). Якщо номер дзвінка відомий, клієнта вже ідентифіковано: не питай номер чи ідентифікатори. Якщо ні (інструменти просять номер), спитай номер телефону, на який робили запис, і виклич identify_caller.
 - Для даних і дій користуйся інструментами; не вигадуй фактів. Спершу виклич get_client_profile.
 - Дотримуйся політики закладу; не обіцяй винятків, яких не підтвердив інструмент.
 - Якщо інструмент повернув pending_approval, скажи, що перевіриш це з адміністратором і зв'яжешся з клієнтом згодом.
@@ -58,7 +58,7 @@ def _load_env() -> None:
 def main() -> int:
     import httpx
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from agent.tools import default_registry
+    from agent.voice import voice_registry
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--number", action="store_true", help="купити/підключити безкоштовний номер Vapi")
@@ -69,7 +69,7 @@ def main() -> int:
         print("Потрібні VAPI_API_KEY і PUBLIC_URL", file=sys.stderr)
         return 1
     headers = {"Authorization": f"Bearer {key}"}
-    payload = build_assistant_payload(default_registry().declarations(), public,
+    payload = build_assistant_payload(voice_registry([]).declarations(), public,
                                       os.environ.get("VOICE_TENANT_ID", "lumen"))
     aid = os.environ.get("VAPI_ASSISTANT_ID")
     with httpx.Client(base_url=API, headers=headers, timeout=30) as c:

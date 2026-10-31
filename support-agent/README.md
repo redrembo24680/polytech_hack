@@ -86,6 +86,8 @@ Vapi тримає номер, STT/TTS і власний LLM-цикл, а наш�
 4. `uv run python scripts/vapi_setup.py --number` — створить асистента, надрукує `VAPI_ASSISTANT_ID` (додайте в `.env`) і номер.
 5. Зателефонуйте на номер з телефону клієнта із seed (напр. +380501110001).
 
+Веб-дзвінок ("Talk to assistant") без номера: асистент питає номер і викликає `identify_caller`; після апруву клієнту йде SMS.
+
 Ручна перевірка без Vapi: `curl -X POST localhost:8000/voice/tools/get_client_profile -H 'content-type: application/json' -d '{"phone":"+380501110001","args":{}}'`.
 
 ## Підключення до платформи тіммейта

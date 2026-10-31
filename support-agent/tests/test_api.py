@@ -207,3 +207,38 @@ def test_list_tenants():
     r = c.get("/tenants")
     assert r.status_code == 200
     assert r.json() == {"tenants": [{"id": "lumen", "name": "Lumen Beauty"}, {"id": "denta", "name": "DentaPlus"}]}
+
+
+def test_decide_on_chat_webhook_session_posts_reply_to_site(monkeypatch):
+    import json
+    import httpx
+    monkeypatch.setenv("APP_API_URL", "http://site:8001")
+    script = [Msg("model", [CallPart("apply_goodwill_exception", {"booking_id": "b-max-1", "reason": "x"})]),
+              Msg("model", [TextPart("Питаю адміністратора.")]),
+              Msg("model", [TextPart("Адміністратор погодив.")])]
+    c, _ = make(script)
+    seen = []
+
+    def handler(req):
+        seen.append((str(req.url), json.loads(req.content)))
+        return httpx.Response(200, json={})
+
+    c.app.state.reply_transport = httpx.MockTransport(handler)
+    r = c.post("/chat", json={"tenant_id": "lumen", "conversation_id": "cv9", "client_id": "max",
+                              "messages": [{"role": "client", "text": "допоможіть", "ts": NOW.isoformat()}]})
+    assert r.json()["reply"]
+    ap = c.get("/tenants/lumen/approvals").json()["approvals"][0]
+    c.post(f"/approvals/{ap['id']}/decide", json={"approve": True, "note": None, "by": "Оля"})
+    assert seen == [("http://site:8001/api/tenants/lumen/support/conversations/cv9/reply",
+                     {"text": "Адміністратор погодив.", "role": "agent"})]
+
+
+def test_decide_on_voice_session_sends_sms_without_llm():
+    from tests.test_voice import MAX, body
+    c, ds = make([])
+    c.post("/voice/tools", json=body(MAX, "apply_goodwill_exception", {"booking_id": "b-max-1", "reason": "x"}))
+    ap = c.get("/tenants/lumen/approvals").json()["approvals"][0]
+    r = c.post(f"/approvals/{ap['id']}/decide", json={"approve": True, "note": None, "by": "Оля"})
+    assert r.status_code == 200 and r.json()["reply"].startswith("Адміністратор схвалив виняток з доброї волі.")
+    assert any(m.channel == "sms" and m.text == r.json()["reply"] for m in ds._messages)
+    assert c.app.state.llm.calls == []

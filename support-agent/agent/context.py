@@ -11,7 +11,7 @@ from agent.events import ApprovalStore, EventLog
 class SessionCtx:
     session_id: str
     tenant_id: str
-    client_id: str
+    client_id: str | None
     now: datetime
     ds: DataSource
     events: EventLog

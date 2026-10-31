@@ -20,7 +20,7 @@ from agent.datasource import DataError, make_datasource
 from agent.events import ApprovalStore, EventLog, metrics
 from agent.llm import make_client
 from agent.orchestrator import make_orchestrator
-from agent.sessions import ensure_backends
+from agent.sessions import deliver_reply, ensure_backends, voice_decision_text
 from agent.tools import default_registry
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -144,7 +144,14 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
         with st.locks[session.id]:
             result = execute_approved(approval, session.ctx) if execute else {"status": "rejected"}
             try:
-                return result, session.resume_after_approval(approval, result), None
+                if session.channel == "voice":  # Vapi has its own LLM loop: no resume, deterministic text
+                    reply = voice_decision_text(approval, result)
+                    st.events.emit(session.id, session.tenant_id, "approval_decided",
+                                   {**approval.model_dump(mode="json"), "result": result})
+                else:
+                    reply = session.resume_after_approval(approval, result)
+                deliver_reply(session, reply, getattr(st, "reply_transport", None))
+                return result, reply, None
             except Exception as e:
                 st.events.emit(session.id, session.tenant_id, "error", {"message": str(e)})
                 return result, None, {"error": "resume_failed",

@@ -1,4 +1,5 @@
 """Вебхук чат-віджета платформи: POST /chat -> {"reply": "<plain text>"}; картки рендеряться текстом."""
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Request
@@ -67,6 +68,8 @@ def _handle(app, tenant_id: str, body: dict) -> str:
         return ASK_PHONE_TEXT
     key = f'chat:{tenant_id}:{body.get("conversation_id")}'
     session = get_or_create_session(app, key, tenant_id, client.id, "chat")
+    session.meta.update({"conversation_id": body.get("conversation_id"),
+                         "site_base_url": os.environ.get("APP_API_URL", "")})
     with st.locks[key]:
         prior = st.events.since(key, 0)
         last_id = prior[-1].id if prior else 0

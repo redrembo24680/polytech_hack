@@ -285,3 +285,12 @@ def test_triage_emotion_reaches_per_turn_prompt(sess_factory):
     system = fake.calls[0]["system"]
     assert "Оркестратор: емоція frustrated (2/3), регістр casual" in system
     assert "Клієнт просить перенести запис на завтра" in system
+
+
+def test_prompt_channel_cards_section(ds):
+    t, cl = ds.get_tenant("lumen"), ds.get_client("lumen", "olena")
+    web = build_system_prompt(t, cl, NOW)
+    assert "booking_summary" in web and "нумерованим списком" not in web
+    for ch in ("chat", "voice"):
+        p = build_system_prompt(t, cl, NOW, channel=ch)
+        assert "нумерованим списком" in p and "booking_summary" not in p

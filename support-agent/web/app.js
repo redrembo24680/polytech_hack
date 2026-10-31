@@ -35,7 +35,9 @@ async function loadClients() {
   sel.textContent = "";
   try {
     const d = await api("/tenants/" + $("tenant").value);
-    d.clients.forEach((c) => {
+    const demo = d.clients.filter((c) => !c.id.startsWith("c-"));
+    const rest = d.clients.filter((c) => c.id.startsWith("c-"));
+    demo.concat(rest).slice(0, 15).forEach((c) => {
       const o = el("option", "", c.name + " (" + c.id + ")");
       o.value = c.id;
       sel.appendChild(o);
