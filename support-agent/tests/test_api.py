@@ -104,7 +104,7 @@ def test_metrics_shape():
     c, _ = make([])
     m = c.get("/tenants/lumen/metrics").json()
     assert set(m) == {"sessions", "messages", "tool_calls", "auto_actions", "approvals_pending",
-                      "approvals_approved", "approvals_rejected", "escalations", "money_saved_uah"}
+                      "approvals_approved", "approvals_rejected", "escalations", "intents", "money_saved_uah"}
 
 
 def test_tenant_endpoint_lists_clients():
@@ -184,3 +184,19 @@ def test_create_session_without_llm_key_is_503(monkeypatch):
     r = c.post("/sessions", json={"tenant_id": "lumen", "client_id": "max", "channel": "chat"})
     assert r.status_code == 503
     assert r.json() == {"error": "llm_unavailable", "message": "Не задано GEMINI_API_KEY"}
+
+
+def test_injected_orchestrator_answers_without_worker():
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+    from agent.orchestrator import Orchestrator
+
+    orch = Orchestrator(FakeListChatModel(responses=[
+        '{"intent":"question","urgency":"low","tone":"calm","route":"answer","hint":"","reply":"Працюємо до 20:00."}']),
+        "gemma-test")
+    ds = MemoryDataSource.from_file(SEED_PATH, NOW, now_fn=lambda: NOW)
+    c = TestClient(create_app(ds=ds, llm=FakeClient([]), now_fn=lambda: NOW, orchestrator=orch))
+    sid = new_session(c)
+    assert c.post(f"/sessions/{sid}/messages", json={"text": "До котрої працюєте?"}).json()["reply"] == "Працюємо до 20:00."
+    types = [e["type"] for e in c.get(f"/sessions/{sid}/events").json()["events"]]
+    assert types == ["user_message", "triage", "assistant_message"]

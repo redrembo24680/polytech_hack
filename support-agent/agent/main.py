@@ -18,6 +18,7 @@ from agent.agent import Session, execute_approved
 from agent.datasource import DataError, MemoryDataSource
 from agent.events import ApprovalStore, EventLog, metrics
 from agent.llm import make_client
+from agent.orchestrator import make_orchestrator
 from agent.tools import default_registry
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,7 +45,7 @@ class Decision(BaseModel):
     by: str
 
 
-def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
+def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     now_fn = now_fn or (lambda: datetime.now(ZoneInfo("Europe/Kyiv")))
     ds = ds or MemoryDataSource.from_file(Path(__file__).parent / "seed.json", now_fn(), now_fn=now_fn)
     app = FastAPI(title="Support agent")
@@ -53,6 +54,7 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
     st.ds, st.events, st.approvals = ds, EventLog(now_fn), ApprovalStore(now_fn)
     st.sessions, st.locks = {}, {}
     st.llm, st.counter, st.guard = llm, 0, threading.Lock()
+    st.orchestrator, st.orch_ready = orchestrator, orchestrator is not None
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, e: ApiError):
@@ -90,10 +92,12 @@ def create_app(ds=None, llm=None, now_fn=None) -> FastAPI:
                     st.llm = make_client()
                 except RuntimeError as e:
                     raise ApiError(503, "llm_unavailable", str(e)) from None
+            if not st.orch_ready:
+                st.orchestrator, st.orch_ready = make_orchestrator(), True
             st.counter += 1
             sid = f"s-{st.counter}"
         st.sessions[sid] = Session(sid, body.tenant_id, body.client_id, body.channel, ds,
-                                   st.events, st.approvals, st.llm, default_registry(), now_fn)
+                                   st.events, st.approvals, st.llm, default_registry(), now_fn, st.orchestrator)
         st.locks[sid] = threading.Lock()
         return {"session_id": sid}
 

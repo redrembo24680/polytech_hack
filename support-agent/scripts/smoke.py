@@ -13,6 +13,7 @@ from agent.agent import Session, execute_approved  # noqa: E402
 from agent.datasource import MemoryDataSource  # noqa: E402
 from agent.events import ApprovalStore, EventLog  # noqa: E402
 from agent.llm import make_client  # noqa: E402
+from agent.orchestrator import make_orchestrator  # noqa: E402
 from agent.tools import default_registry  # noqa: E402
 
 CHILD = "Вибачте, в мене дитина захворіла, я не зможу {when}, можна щось зробити?"
@@ -48,6 +49,8 @@ def describe(event) -> str:
         detail = f"{p.get('type')}: {short(p.get('title', ''))}"
     elif t in ("approval_created", "approval_decided"):
         detail = f"{p.get('id')} {p.get('tool')} status={p.get('status')} {short(p.get('args'))}"
+    elif t == "triage":
+        detail = f"{p.get('intent')}/{p.get('urgency')}/{p.get('tone')} -> {p.get('route')} {short(p.get('hint', ''))}"
     else:
         detail = short(p)
     return f"#{event.id:<3} {t:<17} {detail}"
@@ -82,7 +85,7 @@ def main() -> int:
     events, approvals = EventLog(now_fn), ApprovalStore(now_fn)
     text = template.format(when=when(ds.get_booking(tenant_id, booking_id), now_fn()))
     session = Session(f"smoke-{args.scenario}", tenant_id, client_id, "chat", ds, events, approvals,
-                      llm, default_registry(), now_fn)
+                      llm, default_registry(), now_fn, make_orchestrator())
 
     print(f"== Сценарій {args.scenario}: {tenant_id}/{client_id}\n> {text}")
     reply = session.send(text)

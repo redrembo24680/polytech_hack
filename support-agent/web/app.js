@@ -175,6 +175,13 @@ function renderFeed(ev) {
       row.appendChild(d);
       break;
     }
+    case "triage": {
+      row.appendChild(el("span", "", "🧭 Оркестратор (Gemma 4): " + [p.intent, p.urgency, p.tone].join(" · ") + " → " + p.route));
+      const color = { urgent: "#d33", high: "#d90" }[p.urgency];
+      if (color) { row.style.color = color; row.style.fontWeight = "600"; }
+      if (p.hint) row.title = p.hint;
+      break;
+    }
     case "error": row.textContent = "⚠ " + (p.message || pretty(p)); break;
     case "approval_created": row.textContent = "🕓 Запит на апрув: " + (p.tool || p.id || ""); break;
     case "approval_decided":
@@ -276,6 +283,12 @@ async function loadMetrics() {
     const m = await api("/tenants/" + $("tenant").value + "/metrics");
     const grid = $("metrics");
     grid.textContent = "";
+    if (m.intents && Object.keys(m.intents).length) {
+      const t = el("div", "tile");
+      t.appendChild(el("b", "", Object.entries(m.intents).map(([k, v]) => k + " " + v).join(", ")));
+      t.appendChild(el("span", "", "Наміри (оркестратор)"));
+      grid.appendChild(t);
+    }
     Object.keys(METRIC_LABELS).forEach((k) => {
       if (!(k in m)) return;
       const t = el("div", "tile");

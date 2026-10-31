@@ -30,3 +30,6 @@
 ## Інші перетини
 - Фронт `support-agent/web/` викликає лише API агента (той самий origin, CORS відкритий).
 - Адмінка апки може брати чергу апрувів з `GET /tenants/{id}/approvals` і метрики з `/metrics`.
+
+## Gemma 4 / Ollama (оркестратор)
+`langchain-ollama` `ChatOllama` -> `ORCHESTRATOR_BASE_URL` (за замовчуванням `http://localhost:11434`), модель `ORCHESTRATOR_MODEL`. Окремо від провайдера воркера (`AGENT_PROVIDER`). Оркестратор не має доступу до tools і даних апки, лише до `rules_text` і короткого опису клієнта.

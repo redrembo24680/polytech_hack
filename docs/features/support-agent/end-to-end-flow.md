@@ -14,3 +14,6 @@
 12. Фронт показує відповідь, картки і оновлені метрики (`GET /tenants/{id}/metrics`).
 
 Без HTTP той самий шлях проходить `support-agent/scripts/smoke.py` (сценарій B вирішує апрув сам).
+
+## Крок 0: тріаж оркестратором
+Після `user_message` `Session.send` викликає `Orchestrator.triage` (Gemma 4 через LangChain) і емітить `triage`. `answer`: емітиться `assistant_message` з `reply`, воркер не викликається. `escalate` або `agent`: далі звичайний цикл, а підказка (`hint`) додається в системний промпт розділом "Підказка оркестратора". Якщо Gemma недоступна, `triage` відсутня і флоу без змін.

@@ -97,3 +97,9 @@ def sess_factory():
         )
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def _no_real_orchestrator(monkeypatch):
+    """Tests never talk to a real Gemma: create_app's default make_orchestrator() must return None."""
+    monkeypatch.setenv("ORCHESTRATOR", "off")

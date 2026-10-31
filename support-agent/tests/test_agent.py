@@ -181,3 +181,54 @@ def test_execute_approved_holds_write_lock(sess_factory, monkeypatch):
     monkeypatch.setattr(s.ds, "cancel", spy)
     execute_approved(_approved(s, "cancel_booking", {"booking_id": "b-petro-1", "reason": "x"}), s.ctx)
     assert seen["locked"] is True
+
+
+def _orch(**kw):
+    import json
+
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+    from agent.orchestrator import Orchestrator
+
+    base = {"intent": "question", "urgency": "low", "tone": "calm", "route": "agent", "hint": "", "reply": ""}
+    return Orchestrator(FakeListChatModel(responses=[json.dumps({**base, **kw})]), "gemma-test")
+
+
+def test_orchestrator_answer_skips_worker(sess_factory):
+    fake = FakeClient([])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(route="answer", reply="Працюємо до 20:00.")
+    assert s.send("До котрої працюєте?") == "Працюємо до 20:00."
+    assert fake.calls == []
+    ev = s.events.since(s.id)
+    assert [e.type for e in ev] == ["user_message", "triage", "assistant_message"]
+    assert ev[1].payload["reply"] == "Працюємо до 20:00." and ev[1].payload["model"] == "gemma-test"
+    assert [m.role for m in s.history] == ["user", "model"]
+
+
+def test_orchestrator_hint_goes_to_system_prompt(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(intent="reschedule", hint="Візит менш ніж за 24 год; перевір goodwill.")
+    s.send("Перенесіть запис")
+    assert "Підказка оркестратора" in fake.calls[0]["system"]
+    assert "перевір goodwill" in fake.calls[0]["system"]
+    assert fake.calls[0]["history"][0].parts[0].text == "Перенесіть запис"
+
+
+def test_orchestrator_escalate_hint(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch(intent="complaint", tone="angry", route="escalate")
+    s.send("Це жах!")
+    assert "escalate_to_human" in fake.calls[0]["system"]
+
+
+def test_orchestrator_failure_runs_worker_normally(sess_factory):
+    fake = FakeClient([Msg("model", [TextPart("ок")])])
+    s = sess_factory("lumen", "olena", fake)
+    s.orchestrator = _orch()
+    s.orchestrator._chain = None  # triage() swallows the error
+    assert s.send("x") == "ок"
+    assert "triage" not in [e.type for e in s.events.since(s.id)]
+    assert "Підказка оркестратора" not in fake.calls[0]["system"]

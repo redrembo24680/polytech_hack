@@ -27,3 +27,5 @@ support-agent/tests/ pytest
 - `run_loop`: при помилці LLM / вичерпанні `max_iter` емітить `error`, а потім `assistant_message` із запасним текстом; порожня відповідь моделі замінюється на `EMPTY_REPLY_TEXT`. `GeminiClient` пропускає thought-частини, зберігає `thought_signature` у `CallPart.signature` і ретраїть 429/5xx (0,5/1/2 с).
 - `Session` створює `SessionCtx` (tenant, client, `now`, ds, events, approvals, `goodwill_applied`) і передає tools через contextvar.
 - Час усюди з таймзоною `Europe/Kyiv`, `now_fn` інжектиться (тести фіксують час). `MemoryDataSource(seed, now, now_fn)`: `now` будує демо-дані, `now_fn` використовується для перевірки "не в минулому", слотів і часу в історії.
+
+- `support-agent/agent/orchestrator.py`: `Triage`, `Orchestrator` (LCEL: `ChatPromptTemplate | chat_model | JsonOutputParser`), `make_orchestrator()`. `Session` приймає `orchestrator`, `create_app(orchestrator=...)` створює його ліниво разом з `make_client()`. `EventType` має `triage`, `metrics()` повертає `intents`.

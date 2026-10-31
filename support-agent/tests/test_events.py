@@ -77,6 +77,7 @@ def test_metrics_counts():
         "approvals_approved": 1,
         "approvals_rejected": 1,
         "escalations": 1,
+        "intents": {},
         "money_saved_uah": 500,
     }
 
@@ -115,3 +116,12 @@ def test_metrics_reads_saved_uah_from_tool_result_payload():
     log.emit("s1", "t1", "tool_result", {"name": "reschedule_booking", "result": {"status": "done", "saved_uah": 500}})
     log.emit("s1", "t1", "tool_result", {"name": "get_booking", "result": {"id": "b"}})
     assert metrics(log, ApprovalStore(now_fn=lambda: T0), "t1")["money_saved_uah"] == 500
+
+
+def test_metrics_intents_counted_from_triage():
+    log = EventLog(now_fn=lambda: T0)
+    log.emit("s1", "t1", "triage", {"intent": "refund"})
+    log.emit("s1", "t1", "triage", {"intent": "refund"})
+    log.emit("s1", "t1", "triage", {"intent": "question"})
+    log.emit("s9", "t2", "triage", {"intent": "cancel"})
+    assert metrics(log, ApprovalStore(now_fn=lambda: T0), "t1")["intents"] == {"refund": 2, "question": 1}

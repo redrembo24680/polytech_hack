@@ -15,3 +15,6 @@ AI-агент підтримки для платформи бронювань (�
 - Події (`EventLog`) живлять фронт полінгом; метрики рахуються з подій і апрувів.
 - Фронт без фреймворку (`support-agent/web/`), роздається FastAPI з `/`.
 - Відхилення від спеки: немає `POST /voice/tools/...` (stretch), немає prompt caching. `support-agent/agent/cards.py` є, але одна об'єднана схема `card` (union полів трьох типів, `required: [type]`) замість `anyOf`, бо Gemini Schema приймає лише `type/properties/required/items/enum/nullable/description`; суворість по типу перевіряє `parse_card`. У слот-опції додано `staff_id` (потрібен для `reschedule_booking`).
+
+## Оркестратор (Gemma 4 + LangChain)
+`support-agent/agent/orchestrator.py`: Gemma 4 тріажить кожне повідомлення (intent, urgency, tone, route) і веде маршрут; воркер (Claude/інший провайдер) говорить і діє. Маршрути: `answer` (Gemma відповідає сама на просте питання), `escalate` (підказка викликати `escalate_to_human`), `agent` (звичайний цикл + підказка в системному промпті). Правила маршрутів примусово в коді: зміни/скасування/повернення завжди `agent`. Безпека не змінюється: усі дії лише через tools/policy/approvals. Налаштування: `ORCHESTRATOR`, `ORCHESTRATOR_MODEL`, `ORCHESTRATOR_BASE_URL`.

@@ -65,3 +65,11 @@ support-agent/
 - План: `../docs/superpowers/plans/2026-10-31-support-agent.md`
 - Опис фічі за кодом: `../docs/features/support-agent/` (почати з `FEATURE.md`)
 - Журнал робіт: `../docs/WORKLOG.md`
+
+## Оркестратор на Gemma 4 (LangChain)
+Gemma 4 (через Ollama і LangChain, `agent/orchestrator.py`) на кожне повідомлення клієнта робить тріаж: намір, терміновість, тон і маршрут. Основний агент (Claude або інший провайдер) лишається воркером і діє лише через tools/policy/approvals.
+- `answer`: просте питання (`question`, терміновість до `normal`) Gemma відповідає сама, воркер не викликається.
+- `escalate`: скарга в гніві або дуже термінова; воркер отримує підказку викликати `escalate_to_human`.
+- `agent`: звичайний цикл; підказка оркестратора потрапляє в системний промпт цього ходу.
+Дії зі зміни запису, скасування і повернення коштів завжди йдуть через `agent` (це примусово в коді, незалежно від відповіді моделі). Подія `triage` видна в copilot і в метриках (`intents`).
+Налаштування: `ORCHESTRATOR=on|off`, `ORCHESTRATOR_MODEL` (за замовчуванням `gemma4:31b-cloud`, потрібен `ollama signin`; або локальна `gemma4:12b`), `ORCHESTRATOR_BASE_URL`. Якщо Gemma недоступна, оркестратор мовчки пропускається.

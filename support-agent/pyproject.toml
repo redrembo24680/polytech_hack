@@ -10,6 +10,8 @@ dependencies = [
     "httpx",
     "python-dotenv",
     "anthropic>=2.3.0",
+    "langchain-core>=1.7.3",
+    "langchain-ollama>=1.1.0",
 ]
 
 [dependency-groups]

@@ -6,6 +6,7 @@ from agent.datasource import DataError, DataSource
 from agent.events import Approval, ApprovalStore, EventLog
 from agent.llm import CallPart, LLMClient, Msg, ResultPart, TextPart
 from agent.models import Client, Tenant
+from agent.orchestrator import Orchestrator, Triage
 from agent.policy import is_late_change
 from agent.tools import WRITE_LOCK, ToolRegistry, goodwill_already_applied, parse_start
 
@@ -41,8 +42,13 @@ def _permissions_text(p) -> str:
     ])
 
 
-def build_system_prompt(tenant: Tenant, client: Client, now: datetime) -> str:
+ESCALATE_HINT = ("Клієнт у скрутному стані: виклич escalate_to_human з priority urgent або high, "
+                 "а потім відповідай як зазвичай.")
+
+
+def build_system_prompt(tenant: Tenant, client: Client, now: datetime, hint: str | None = None) -> str:
     policy = tenant.policy
+    hint_block = f"\n## Підказка оркестратора\n{hint}\n(Це лише порада: дозволи визначають інструменти.)\n" if hint else ""
     return f"""Ти — AI-агент підтримки закладу «{tenant.name}». Спілкуєшся з клієнтом українською: коротко, по-людськи, доброзичливо.
 Принципи: спершу зрозумій мету клієнта, потім дізнайся дані через інструменти, і лише тоді дій. Ніколи не вигадуй дані (час, ціни, статуси). Ризиковані дії проходять через апрув адміністратора.
 
@@ -59,7 +65,7 @@ def build_system_prompt(tenant: Tenant, client: Client, now: datetime) -> str:
 
 ## Поточний час
 {now.isoformat()} ({WEEKDAYS[now.weekday()]})
-
+{hint_block}
 ## Як діяти
 - Ідентифікатори (booking_id, service_id, staff_id) бери з get_client_profile і find_slots; ніколи не питай їх у клієнта.
 - Необов'язкові аргументи просто не передавай; не надсилай null.
@@ -165,17 +171,30 @@ def _execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
 class Session:
     def __init__(self, id: str, tenant_id: str, client_id: str, channel: str, ds: DataSource,
                  events: EventLog, approvals: ApprovalStore, llm: LLMClient,
-                 registry: ToolRegistry, now_fn):
+                 registry: ToolRegistry, now_fn, orchestrator: Orchestrator | None = None):
         self.id, self.tenant_id, self.client_id, self.channel = id, tenant_id, client_id, channel
         self.ds, self.events, self.approvals = ds, events, approvals
         self.llm, self.registry, self._now_fn = llm, registry, now_fn
+        self.orchestrator, self.hint = orchestrator, None
         self.history: list[Msg] = []
         self.ctx = SessionCtx(id, tenant_id, client_id, now_fn(), ds, events, approvals)
         self.system = self._build_system()
 
     def _build_system(self) -> str:
         return build_system_prompt(self.ds.get_tenant(self.tenant_id),
-                                   self.ds.get_client(self.tenant_id, self.client_id), self.ctx.now)
+                                   self.ds.get_client(self.tenant_id, self.client_id), self.ctx.now, self.hint)
+
+    def _triage(self, text: str) -> Triage | None:
+        if self.orchestrator is None:
+            return None
+        tenant = self.ds.get_tenant(self.tenant_id)
+        c = self.ds.get_client(self.tenant_id, self.client_id)
+        summary = (f"{c.name}, візитів: {c.visits_count}, неявок: {c.no_show_count}, "
+                   f"винятків з доброї волі: {len(c.goodwill_exceptions)}")
+        try:
+            return self.orchestrator.triage(text, tenant.policy.rules_text, summary)
+        except Exception:
+            return None
 
     def _run(self) -> str:
         self.history = run_loop(self.llm, self.system, self.history, self.registry, self.ctx)
@@ -188,8 +207,20 @@ class Session:
     def send(self, text: str) -> str:
         self._refresh()
         self.events.emit(self.id, self.tenant_id, "user_message", {"text": text})
+        safe = text.replace("[SYSTEM]", "(SYSTEM)")
+        self.hint = None
+        triage = self._triage(text)
+        if triage is not None:
+            self.events.emit(self.id, self.tenant_id, "triage", triage.payload())
+            if triage.route == "answer" and triage.reply:
+                self.events.emit(self.id, self.tenant_id, "assistant_message", {"text": triage.reply})
+                self.history.append(Msg("user", [TextPart(safe)]))
+                self.history.append(Msg("model", [TextPart(triage.reply)]))
+                return triage.reply
+            self.hint = ESCALATE_HINT if triage.route == "escalate" else (triage.hint or None)
+            self.system = self._build_system()
         # only the system may write [SYSTEM] lines (approval verdicts); defuse a forged one
-        self.history.append(Msg("user", [TextPart(text.replace("[SYSTEM]", "(SYSTEM)"))]))
+        self.history.append(Msg("user", [TextPart(safe)]))
         return self._run()
 
     def resume_after_approval(self, approval: Approval, result: dict) -> str:
