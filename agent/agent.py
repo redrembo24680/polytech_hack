@@ -97,6 +97,9 @@ def _last_text(history: list[Msg]) -> str:
 
 
 def execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
+    """Викликати рівно один раз після decide(); повторний виклик не захищений тут."""
+    if approval.status != "approved":
+        return {"error": "not_approved", "message": "Апрув не схвалено."}
     by = f"human:{approval.decided_by or 'адміністратор'}"
     a, ds, t = approval.args, ctx.ds, approval.tenant_id
     try:
@@ -122,6 +125,9 @@ def execute_approved(approval: Approval, ctx: SessionCtx) -> dict:
         return {"status": "done", "booking": out.model_dump(mode="json")}
     except DataError as e:
         return {"error": e.code, "message": e.message}
+    except Exception as e:  # never raise into the approval flow
+        return {"error": "internal", "message": "Внутрішня помилка виконання апруву.",
+                "detail": f"{type(e).__name__}: {e}"}
 
 
 class Session:

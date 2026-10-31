@@ -48,8 +48,8 @@ def test_resume_after_approval_executes_and_continues(sess_factory):
     s = sess_factory("lumen", "max", fake)
     s.send("дитина захворіла")
     ap = s.approvals.pending("lumen")[0]
-    result = execute_approved(ap, s.ctx)
     ap = s.approvals.decide(ap.id, True, "Оля", "ок")
+    result = execute_approved(ap, s.ctx)
     assert s.resume_after_approval(ap, result) == "Адміністратор погодив, переношу."
     assert s.ds.get_client("lumen", "max").goodwill_exceptions[-1].booking_id == "b-max-1"
     assert "b-max-1" in s.ctx.goodwill_applied
@@ -61,3 +61,28 @@ def test_execute_approved_unknown_tool(sess_factory):
     s = sess_factory("lumen", "max", FakeClient([]))
     ap = s.approvals.create(s.id, "lumen", "nope", {}, "r")
     assert execute_approved(ap, s.ctx) == {"error": "unknown_tool"}
+
+
+def _pending_goodwill(sess_factory):
+    fake = FakeClient([Msg("model", [CallPart("apply_goodwill_exception", {"booking_id": "b-max-1", "reason": "x"})]),
+                       Msg("model", [TextPart("Уточню.")])])
+    s = sess_factory("lumen", "max", fake)
+    s.send("x")
+    return s, s.approvals.pending("lumen")[0]
+
+
+def test_execute_approved_requires_approved_status(sess_factory):
+    s, ap = _pending_goodwill(sess_factory)
+    before = len(s.ds.get_client("lumen", "max").goodwill_exceptions)
+    assert execute_approved(ap, s.ctx)["error"] == "not_approved"
+    rejected = s.approvals.decide(ap.id, False, "Оля", "ні")
+    assert execute_approved(rejected, s.ctx)["error"] == "not_approved"
+    assert len(s.ds.get_client("lumen", "max").goodwill_exceptions) == before
+    assert not s.ctx.goodwill_applied
+
+
+def test_execute_approved_never_raises(sess_factory):
+    s, ap = _pending_goodwill(sess_factory)
+    ap = s.approvals.decide(ap.id, True, "Оля", "ок")
+    bad = ap.model_copy(update={"args": {"booking_id": "b-max-1"}})
+    assert execute_approved(bad, s.ctx)["error"] == "internal"
