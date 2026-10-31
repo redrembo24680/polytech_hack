@@ -79,7 +79,7 @@
     layout();
   }
 
-  btn.addEventListener('click', function () { isOpen ? close() : open(); });
+  btn.addEventListener('click', function () { if (isOpen) { close(); } else { open(); } });
   closeBtn.addEventListener('click', close);
   window.addEventListener('resize', layout);
 
