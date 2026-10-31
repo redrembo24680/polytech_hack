@@ -50,3 +50,6 @@
 - Пошук Claude-кредитів: сторінка івенту MLH (партнер SKELAR) не згадує Anthropic/кредити, зате
   має Gemma-ресурси і воркшоп про local LLMs; DevRelay офферів нуль; у вебі нічого.
   **Рішення: Gemma 4 через Gemini API (free), SDK google-genai.** Спека агента оновлена.
+- Рішення: DevRelay-кредити не чекаємо. Написано план `docs/superpowers/plans/2026-10-31-support-agent.md`
+  (11 задач, 9 основних + 2 stretch). Виконання: subagent-driven-development, TDD, субагенти на Sonnet,
+  оркестратор — ця сесія.
