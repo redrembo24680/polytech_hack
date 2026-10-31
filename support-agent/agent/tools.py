@@ -80,7 +80,7 @@ class ToolRegistry:
             with WRITE_LOCK if spec.kind == "write" else nullcontext():
                 early = spec.precheck(**args) if spec.precheck else None
                 if early is not None:
-                    label = "noop"
+                    label = "blocked" if early.get("status") == "blocked" else "noop"
                 elif spec.kind == "write":
                     # policy decision is computed BEFORE anything is executed or logged as done
                     decision = _decide_for(spec, c, args)
@@ -263,6 +263,15 @@ def goodwill_precheck(booking_id: str, reason: str) -> dict | None:
     return None
 
 
+def pending_goodwill_precheck(booking_id: str, **_) -> dict | None:
+    """Поки адміністратор не вирішив виняток, перенесення/скасування виконало б його з згорянням передоплати."""
+    c = get_ctx()
+    if any(a.tool == "apply_goodwill_exception" and a.args.get("booking_id") == booking_id
+           for a in c.approvals.pending(c.tenant_id) if a.session_id == c.session_id):
+        return {"status": "blocked", "reason": "Очікується рішення адміністратора щодо винятку для цього запису."}
+    return None
+
+
 def apply_goodwill_exception(booking_id: str, reason: str) -> dict:
     c = get_ctx()
     b = _own_booking(c, booking_id)
@@ -326,9 +335,9 @@ def default_registry() -> ToolRegistry:
                      "start": ("string", "Новий початок: дата й час ISO 8601 з часовим поясом, як у слотах find_slots"),
                      "reason": REASON,
                      "staff_id": ("string", "Ідентифікатор майстра (необов'язково)"),
-                 }, optional=("staff_id",)), reschedule_booking, "write", "reschedule"),
+                 }, optional=("staff_id",)), reschedule_booking, "write", "reschedule", pending_goodwill_precheck),
         ToolSpec("cancel_booking", "Скасувати бронювання. Дія проходить перевірку політики закладу.",
-                 _schema({"booking_id": BOOKING_ID, "reason": REASON}), cancel_booking, "write", "cancel"),
+                 _schema({"booking_id": BOOKING_ID, "reason": REASON}), cancel_booking, "write", "cancel", pending_goodwill_precheck),
         ToolSpec("refund_prepayment", "Повернути передоплату (повністю). Дія проходить перевірку політики закладу.",
                  _schema({"booking_id": BOOKING_ID, "amount": ("integer", "Сума повернення в гривнях"), "reason": REASON}),
                  refund_prepayment, "write", "refund"),

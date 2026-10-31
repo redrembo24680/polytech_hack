@@ -1,39 +1,19 @@
 """Вебхук чат-віджета платформи: POST /chat -> {"reply": "<plain text>"}; картки рендеряться текстом."""
 import os
-from datetime import datetime
+import re
 
 from fastapi import APIRouter, Request
 
+from agent.cards import card_to_text
 from agent.datasource import DataError
 from agent.sessions import get_or_create_session
 from agent.voice import normalize_phone
 
 router = APIRouter()
 
+PHONE_IN_TEXT = re.compile(r"\+?\d[\d\s\-()]{7,16}\d")
 ASK_PHONE_TEXT = "Підкажіть, будь ласка, номер телефону, на який робили запис, щоб я знайшов ваш запис."
 ERROR_TEXT = "Вибачте, сталася технічна помилка. Адміністратор відповість найближчим часом."
-
-
-def _when(iso: str) -> str:
-    try:
-        return datetime.fromisoformat(iso).strftime("%d.%m %H:%M")
-    except ValueError:
-        return iso
-
-
-def card_to_text(card: dict) -> str:
-    kind = card.get("type")
-    if kind == "slots":
-        lines = ["Вільні варіанти:"]
-        for i, o in enumerate(card.get("options") or [], 1):
-            lines.append(f'{o.get("id") or i}) {_when(o["start"])} — {o["staff_name"]}')
-        lines.append("Напишіть номер варіанта.")
-        return "\n".join(lines)
-    if kind == "booking_summary":
-        p = card["prepayment"]
-        return (f'{card["service"]}, {card["staff"]}, {_when(card["start"])}, '
-                f'передоплата {p["amount"]} грн ({p["status"]})')
-    return f'✅ {card["title"]}\n{card["outcome"]}'
 
 
 def _last_client_text(messages: list[dict]) -> str:
@@ -64,11 +44,17 @@ def _handle(app, tenant_id: str, body: dict) -> str:
     if not text:
         return ""
     client = _resolve_client(st.ds, tenant_id, body)
+    if client is None:  # невідомий відвідувач міг назвати номер у повідомленні
+        m = PHONE_IN_TEXT.search(text)
+        if m and 9 <= len(re.sub(r"\D", "", m.group())) <= 12:
+            found = st.ds.find_client_by_phone(tenant_id, normalize_phone(m.group()))
+            client = found[0] if found else None
     if client is None:
         return ASK_PHONE_TEXT
-    key = f'chat:{tenant_id}:{body.get("conversation_id")}'
+    conv = body.get("conversation_id") or ""
+    key = f'chat:{tenant_id}:{conv}'
     session = get_or_create_session(app, key, tenant_id, client.id, "chat")
-    session.meta.update({"conversation_id": body.get("conversation_id"),
+    session.meta.update({"conversation_id": conv,
                          "site_base_url": os.environ.get("APP_API_URL", "")})
     with st.locks[key]:
         prior = st.events.since(key, 0)

@@ -1,4 +1,5 @@
 """Картки, які модель показує через show_card: pydantic-схеми, валідація і JSON-схема для Gemini."""
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -105,3 +106,25 @@ def card_json_schema() -> dict:
         "properties": props,
         "required": ["type"],
     }
+
+
+def _when(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).strftime("%d.%m %H:%M")
+    except ValueError:
+        return iso
+
+
+def card_to_text(card: dict) -> str:
+    kind = card.get("type")
+    if kind == "slots":
+        lines = ["Вільні варіанти:"]
+        for i, o in enumerate(card.get("options") or [], 1):
+            lines.append(f'{o.get("id") or i}) {_when(o["start"])} — {o["staff_name"]}')
+        lines.append("Напишіть номер варіанта.")
+        return "\n".join(lines)
+    if kind == "booking_summary":
+        p = card["prepayment"]
+        return (f'{card["service"]}, {card["staff"]}, {_when(card["start"])}, '
+                f'передоплата {p["amount"]} грн ({p["status"]})')
+    return f'✅ {card["title"]}\n{card["outcome"]}'

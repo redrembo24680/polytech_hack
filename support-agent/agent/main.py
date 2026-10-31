@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
@@ -20,10 +21,12 @@ from agent.datasource import DataError, make_datasource
 from agent.events import ApprovalStore, EventLog, metrics
 from agent.llm import make_client
 from agent.orchestrator import make_orchestrator
+from agent.cards import card_to_text
 from agent.sessions import deliver_reply, ensure_backends, voice_decision_text
 from agent.tools import default_registry
 
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv()  # APP_API_URL та ключі з .env мають діяти до make_datasource()
 
 
 class ApiError(Exception):
@@ -143,6 +146,8 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
     def finish(session: Session, approval, execute: bool) -> tuple[dict, str | None, dict | None]:
         with st.locks[session.id]:
             result = execute_approved(approval, session.ctx) if execute else {"status": "rejected"}
+            prior = st.events.since(session.id, 0)
+            last_id = prior[-1].id if prior else 0
             try:
                 if session.channel == "voice":  # Vapi has its own LLM loop: no resume, deterministic text
                     reply = voice_decision_text(approval, result)
@@ -150,6 +155,8 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
                                    {**approval.model_dump(mode="json"), "result": result})
                 else:
                     reply = session.resume_after_approval(approval, result)
+                    cards = [card_to_text(e.payload) for e in st.events.since(session.id, last_id) if e.type == "card"]
+                    reply = "\n\n".join(([reply] if reply else []) + cards)
                 deliver_reply(session, reply, getattr(st, "reply_transport", None))
                 return result, reply, None
             except Exception as e:
@@ -172,6 +179,8 @@ def create_app(ds=None, llm=None, now_fn=None, orchestrator=None) -> FastAPI:
         out = {"approval": approval.model_dump(mode="json"), "result": result, "reply": reply}
         return {**out, "error": error} if error else out
 
+    if os.environ.get("VOICE_MANUAL") == "1":  # ручний endpoint без автентифікації: лише для налагодження
+        app.add_api_route("/voice/tools/{tool_name}", voice.manual_tool, methods=["POST"])
     app.include_router(voice.router)
     app.include_router(chat_webhook.router)
     if os.path.isdir(ROOT / "web"):

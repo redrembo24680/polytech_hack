@@ -95,3 +95,43 @@ def test_exception_gives_friendly_reply_and_error_event():
         Session.send = orig
     assert r.status_code == 200 and r.json() == {"reply": ERROR_TEXT}
     assert any(e.type == "error" for e in c.app.state.events.for_tenant("lumen"))
+
+
+def test_missing_conversation_id_still_answers():
+    c, _ = make([Msg("model", [TextPart("ok")])])
+    b = body()
+    del b["conversation_id"]
+    assert c.post("/chat", json=b).json() == {"reply": "ok"}
+
+
+def test_phone_in_message_identifies_visitor():
+    c, _ = make([Msg("model", [TextPart("Знайшов вас")])])
+    r = c.post("/chat", json=body("мій номер 050 111 00 01", client_id=None))
+    assert r.json() == {"reply": "Знайшов вас"}
+    r = c.post("/chat", json=body("мій номер 12345", client_id=None, conv="c2"))
+    assert r.json() == {"reply": ASK_PHONE_TEXT}
+
+
+def test_resume_cards_reach_site_chat():
+    import json
+    import httpx
+    posted = []
+    card = {"type": "decision", "title": "Рішення по запису", "outcome": "Перенесено", "reasoning": ["а"],
+            "actions_taken": ["б"]}
+    ds = MemoryDataSource.from_file(SEED_PATH, NOW)
+    bid = ds.list_client_bookings("lumen", "max")[0].id
+    fake = FakeClient([Msg("model", [CallPart("apply_goodwill_exception", {"booking_id": bid, "reason": "хвороба"})]),
+                       Msg("model", [TextPart("Уточнюю в адміністратора.")]),
+                       Msg("model", [CallPart("show_card", {"card": card})]),
+                       Msg("model", [TextPart("Готово!")])])
+    app = create_app(ds=ds, llm=fake, now_fn=lambda: NOW)
+    app.state.reply_transport = httpx.MockTransport(
+        lambda r: (posted.append(json.loads(r.content)), httpx.Response(200, json={}))[1])
+    c = TestClient(app)
+    c.post("/chat", json=body("прошу виняток", client_id="max"))
+    ap = app.state.approvals.pending("lumen")
+    assert len(ap) == 1
+    app.state.sessions["chat:lumen:c1"].meta["site_base_url"] = "http://site"
+    r = c.post(f"/approvals/{ap[0].id}/decide", json={"approve": True, "by": "admin"})
+    assert r.status_code == 200
+    assert "Готово!" in posted[0]["text"] and "Рішення по запису" in posted[0]["text"]

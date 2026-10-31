@@ -282,3 +282,16 @@ def test_write_tool_runs_under_write_lock(reg, ctx_lumen_olena):
     spec.fn = spy
     assert reg.call("cancel_booking", {"booking_id": "b-olena-1", "reason": "x"})["status"] == "done"
     assert seen["locked"] is True and _other_thread_can_acquire(WRITE_LOCK)
+
+
+def test_reschedule_and_cancel_blocked_while_goodwill_pending(reg, ctx_lumen_max):
+    bid = ctx_lumen_max.ds.list_client_bookings("lumen", "max")[0].id
+    assert reg.call("apply_goodwill_exception", {"booking_id": bid, "reason": "хвороба"})["status"] == "pending_approval"
+    before = ctx_lumen_max.ds.get_booking("lumen", bid).start
+    for name, args in (("reschedule_booking", {"booking_id": bid, "start": "2026-11-03T13:00:00+02:00", "reason": "x"}),
+                       ("cancel_booking", {"booking_id": bid, "reason": "x"})):
+        r = reg.call(name, args)
+        assert r["status"] == "blocked" and "адміністратора" in r["reason"]
+    assert ctx_lumen_max.ds.get_booking("lumen", bid).start == before
+    labels = [e.payload["decision"] for e in ctx_lumen_max.events.since("s1", 0) if e.type == "tool_call"]
+    assert labels[-2:] == ["blocked", "blocked"]
