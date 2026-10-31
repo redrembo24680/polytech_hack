@@ -22,6 +22,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://booking:booking@db:5432/booking
       AGENT_URL: ${AGENT_URL:-}
+      AGENT_TIMEOUT: ${AGENT_TIMEOUT:-60}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8001:8001"
     volumes:

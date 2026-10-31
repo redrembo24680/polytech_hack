@@ -67,13 +67,15 @@ cd site && docker compose up -d --build
 - Повний список інструментів і конфіги для Claude Desktop: [docs/features/mcp-server](docs/features/mcp-server/FEATURE.md)
 
 **Чат-вебхук.** Задайте `AGENT_URL` (файл `site/.env` або змінна середовища; напр. `AGENT_URL=http://host.docker.internal:9000`)
-і перезапустіть: `docker compose up -d backend`. Бекенд викликає `POST {AGENT_URL}/chat` (таймаут 60 с):
+і перезапустіть: `docker compose up -d backend`. Бекенд викликає `POST {AGENT_URL}/chat` (таймаут `AGENT_TIMEOUT`, за замовчуванням 60 с):
 
 ```json
 {
   "tenant_id": "lumen",
   "conversation_id": "conv-1a2b3c",
   "client_id": "olena",
+  "visitor_name": "Олена",
+  "visitor_phone": "380671234501",
   "messages": [
     {"role": "client", "text": "Хочу скасувати запис на завтра", "ts": "2026-10-31T14:32:53.854535+02:00"},
     {"role": "agent", "text": "Підкажіть, будь ласка, час запису", "ts": "2026-10-31T14:33:02.100000+02:00"},
@@ -82,11 +84,13 @@ cd site && docker compose up -d --build
 }
 ```
 
-Відповідь: `{"reply": "Запис скасовано, передоплату повернуто."}`. `client_id` може бути `null` (невідомий телефон);
+Відповідь: `{"reply": "Запис скасовано, передоплату повернуто."}`. `client_id` може бути `null` (невідомий телефон); `visitor_name`/`visitor_phone` — дані, введені відвідувачем у формі чату (можуть бути `null`);
 `messages` — вся історія, `role` ∈ `client|agent|human`. Порожній/відсутній `reply` — повідомлення не створюється
 (агент може відповісти пізніше через `POST /api/tenants/{t}/support/conversations/{id}/reply`).
 Без `AGENT_URL` клієнт бачить заглушку «Агент підтримки ще не підключений». Тестовий агент-ехо:
-`cd site/app/backend && uv run uvicorn scripts.echo_agent:app --port 9000`.
+`cd site/app/backend && uv run uvicorn scripts.echo_agent:app --host 0.0.0.0 --port 9000`
+(на Linux compose додає `host.docker.internal` через `host-gateway`, тому агент має слухати `0.0.0.0`).
+Створення розмови (для власного клієнта чату): `POST /api/tenants/{t}/support/conversations {"client_phone": "...", "client_name": "..."}` -> 201; невідомі ключі -> 422; `GET .../conversations/{id}` -> розмова.
 Деталі: [docs/features/support-chat](docs/features/support-chat/integration-points.md).
 
 ## Тести

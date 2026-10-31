@@ -97,6 +97,43 @@ def test_agent_reply_and_payload(client, agent):
     assert p["client_id"] == "olena"
     assert [m["text"] for m in p["messages"]] == ["Перше", "Вітаю!", "Друге"]
     assert set(p["messages"][0]) == {"role", "text", "ts"}
+    assert p["visitor_name"] is None and p["visitor_phone"] == "380671234501"
+    assert kw["timeout"] == settings.agent_timeout
+
+
+def test_payload_includes_visitor_name(client, agent):
+    calls = agent(FakeResp(data={"reply": "ok"}))
+    c = new_conv(client, client_name="Іра", client_phone="0991112233")
+    send(client, c["id"])
+    p = calls[-1][1]["json"]
+    assert p["visitor_name"] == "Іра" and p["visitor_phone"] == "380991112233"
+
+
+def test_get_conversation(client):
+    c = new_conv(client, client_name="Іра")
+    r = client.get(f"{BASE}/{c['id']}")
+    assert r.status_code == 200 and r.json() == c
+    assert client.get(f"{BASE}/nope").status_code == 404
+    assert client.get(f"/api/tenants/dentaplus/support/conversations/{c['id']}"
+                      ).status_code == 404
+
+
+def test_create_conversation_rejects_unknown_keys(client):
+    r = client.post(BASE, json={"phone": "0671234501"})
+    assert r.status_code == 422 and r.json()["error"] == "validation"
+
+
+def test_no_open_transaction_during_webhook(client, session, monkeypatch):
+    monkeypatch.setattr(settings, "agent_url", "http://agent.test")
+    c = new_conv(client)
+    seen = []
+
+    def fake(url, **kw):
+        seen.append(session.in_transaction())
+        return FakeResp(data={"reply": "ok"})
+    monkeypatch.setattr("booking.services.chat.httpx.post", fake)
+    send(client, c["id"])
+    assert seen == [False]
 
 
 @pytest.mark.parametrize("kw", [

@@ -1,7 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api/tenants/{tenant_id}/support/conversations")
 
 
 class ConversationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     client_phone: str | None = None
     client_name: str | None = None
 
@@ -84,6 +86,12 @@ def list_conversations(tenant_id: str, status: Literal["open", "closed"] | None 
     return [d for _, d in out]
 
 
+@router.get("/{conversation_id}")
+def get_conversation(tenant_id: str, conversation_id: str,
+                     session: Session = Depends(get_session)):
+    return conversation_out(get_or_404(session, Conversation, conversation_id, tenant_id))
+
+
 @router.get("/{conversation_id}/messages")
 def list_messages(tenant_id: str, conversation_id: str, after: str | None = None,
                   session: Session = Depends(get_session)):
@@ -101,7 +109,9 @@ def post_client_message(tenant_id: str, conversation_id: str, body: TextIn,
     _require_open(conv)
     created = [chat.add_message(session, conv, "client", body.text)]
     session.commit()
-    reply = chat.forward_to_agent(conv, chat.history(session, conv))
+    payload = chat.build_agent_payload(conv, chat.history(session, conv))
+    session.commit()  # end the read transaction: no connection held during the webhook
+    reply = chat.forward_to_agent(payload)
     if reply is not None:
         created.append(chat.add_message(session, conv, "agent", reply))
         session.commit()

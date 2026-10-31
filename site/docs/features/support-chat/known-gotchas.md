@@ -6,4 +6,4 @@
 - Закрита розмова: `POST /messages` і `/reply` -> 409 `invalid_state`; UI тоді повертає на форму.
 - Docker: `host.docker.internal` працює з Docker Desktop (macOS/Windows); на Linux потрібен `extra_hosts`.
 - `.env` у `site/` ігнорується git; не комітити. Порожній `AGENT_URL` = заглушка.
-- `?embed=1` ховає шапку в усьому застосунку (через `SiteChrome`), не лише на сторінці чату.
+- `?embed=1` ховає шапку в усьому застосунку (`proxy.ts` ставить заголовок `x-embed`, кореневий layout читає його через `headers()`), не лише на сторінці чату.

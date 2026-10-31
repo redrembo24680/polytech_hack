@@ -1,6 +1,6 @@
 """Test agent: echoes the last client message.
 
-Run: cd app/backend && uv run uvicorn scripts.echo_agent:app --port 9000
+Run: cd app/backend && uv run uvicorn scripts.echo_agent:app --host 0.0.0.0 --port 9000
 (or: uv run python scripts/echo_agent.py)
 """
 from fastapi import FastAPI

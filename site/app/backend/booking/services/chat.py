@@ -32,21 +32,28 @@ def history(session: Session, conv: Conversation) -> list[ChatMessage]:
         ChatMessage.conversation_id == conv.id).order_by(ChatMessage.ts, ChatMessage.id)))
 
 
-def forward_to_agent(conversation: Conversation, messages: list[ChatMessage]) -> str | None:
-    """Send the conversation to the agent. Returns reply text, None for 'no reply',
-    or a stub text when the agent is absent/unavailable."""
-    agent_url = settings.agent_url  # read at call time
-    if not agent_url:
-        return STUB_NO_AGENT
+def build_agent_payload(conversation: Conversation, messages: list[ChatMessage]) -> dict:
     tz = conversation.tenant.timezone
-    payload = {
+    return {
         "tenant_id": conversation.tenant_id,
         "conversation_id": conversation.id,
         "client_id": conversation.client_id,
+        "visitor_name": conversation.visitor_name,
+        "visitor_phone": conversation.visitor_phone,
         "messages": [{"role": m.role, "text": m.text, "ts": iso(m.ts, tz)} for m in messages],
     }
+
+
+def forward_to_agent(payload: dict) -> str | None:
+    """Send the conversation payload to the agent (no DB access: callers end their
+    transaction first). Returns reply text, None for 'no reply', or a stub text when
+    the agent is absent/unavailable."""
+    agent_url = settings.agent_url  # read at call time
+    if not agent_url:
+        return STUB_NO_AGENT
     try:
-        resp = httpx.post(f"{agent_url.rstrip('/')}/chat", json=payload, timeout=60)
+        resp = httpx.post(f"{agent_url.rstrip('/')}/chat", json=payload,
+                          timeout=settings.agent_timeout)
         resp.raise_for_status()
         data = resp.json()
         reply = data.get("reply")
