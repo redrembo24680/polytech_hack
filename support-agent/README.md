@@ -98,3 +98,18 @@ Vapi тримає номер, STT/TTS і власний LLM-цикл, а наш�
 5. Апруви адміністратора: наш copilot на http://localhost:8000 (обрати тенанта `lumen` або `dentaplus`).
 
 Тенанти платформи: `lumen`, `dentaplus`. Без `APP_API_URL` агент працює на демо-даних (`lumen`, `denta`).
+
+## Автозапис демо (Playwright)
+
+Скрипт `scripts/demo/run_demo.py` проходить сцени Q/A/B/C у реальному браузері й пише по відео на сцену
+(клієнт на сайті + copilot) у `demo-videos/{сцена}-customer.webm` і `{сцена}-copilot.webm`.
+
+```
+uv sync                                   # dev-група (playwright) ставиться за замовчуванням
+uv run playwright install chromium
+uv run python scripts/demo/run_demo.py --scene ALL      # або --scene A|B|C|Q, --headless, --slang, --mp4, --no-reset
+```
+
+Потрібно: сайт (docker, `:3000`/`:8001`) і агент (`:8000`) запущені; агента стартуйте протягом дня
+(записи відносні до старту). Перед кожною сценою викликається `POST :8001/api/admin/reset`. Помилки зберігають
+`demo-videos/{сцена}-error.png`, далі йде наступна сцена. `--mp4` конвертує через `ffmpeg`.
