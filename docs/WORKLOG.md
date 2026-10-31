@@ -80,3 +80,4 @@
 - `feat/agent` злито в `main` (e5c8ec8). Структура: `support-agent/`, `app/` (тіммейт), `docs/`.
 - **Відкрито:** живий прогін Gemma 4 (потрібен `GEMINI_API_KEY` у `support-agent/.env`), dev-залежність
   `httpx2`, stretch: HttpDataSource/McpDataSource до платформи тіммейта, голосовий webhook.
+- Додано провайдер `openai_compat`/`ollama` (локальна Gemma 4 через Ollama).

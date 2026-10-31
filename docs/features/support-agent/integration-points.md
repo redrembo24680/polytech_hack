@@ -7,8 +7,10 @@
 ## Env-змінні
 | Змінна | Призначення | Дефолт |
 |---|---|---|
-| `AGENT_PROVIDER` | `gemini` або `fake` (`fake` = на кожне повідомлення фіксована відповідь "Тестова відповідь", без tool-викликів) | `gemini` |
-| `AGENT_MODEL` | модель Gemini API | `gemma-4-31b-it` |
+| `AGENT_PROVIDER` | `gemini`, `openai_compat` (псевдонім `ollama`) або `fake` (`fake` = на кожне повідомлення фіксована відповідь "Тестова відповідь", без tool-викликів) | `gemini` |
+| `AGENT_MODEL` | модель Gemini API або тег локальної моделі (для `openai_compat`) | `gemma-4-31b-it` (для `openai_compat`: `gemma4`) |
+| `OPENAI_BASE_URL` | база OpenAI-сумісного сервера (`POST {base}/chat/completions`), лише для `openai_compat`/`ollama` | `http://localhost:11434/v1` |
+| `OPENAI_API_KEY` | ключ для OpenAI-сумісного сервера (Ollama його ігнорує) | `ollama` |
 | `GEMINI_API_KEY` | ключ з aistudio.google.com; без нього `make_client()` кидає `RuntimeError` | немає |
 | `AGENT_SYSTEM_AS_PREFIX` | `1` = системний промпт іде префіксом у першому user-повідомленні, а не як `system_instruction` (обхід для моделей без підтримки system) | вимкнено |
 | `APP_API_URL` | майбутнє: HTTP-контракт апки, напр. `http://localhost:8001`; у коді ще не читається | немає |
